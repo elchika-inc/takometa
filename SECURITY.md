@@ -12,7 +12,7 @@
 
 セキュリティ上の問題を発見した場合は、**公開 Issue には書かず**、GitHub Security Advisories から報告してください。
 
-- [Report a vulnerability](https://github.com/naoto24kawa/takometa/security/advisories/new)
+- [Report a vulnerability](https://github.com/elchika-inc/takometa/security/advisories/new)
 
 個人が開発している小規模なプロジェクトのため、初回返答までに**7日程度（暦日）**かかることがあります。資格情報の漏洩につながる問題は優先して対応します。対応状況は GitHub Security Advisory で共有します。
 
