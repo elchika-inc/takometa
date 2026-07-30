@@ -1,0 +1,7 @@
+{
+  "rateLimits": {
+    "limitId": "codex", "limitName": null,
+    "primary": {"usedPercent": 34, "windowDurationMins": 300, "resetsAt": 1784963502},
+    "secondary": {"usedPercent": 52, "windowDurationMins": 10080, "resetsAt": 1785067490}
+  }
+}

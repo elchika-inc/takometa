@@ -1,0 +1,19 @@
+# 非公開 API 由来で、機能を説明しない名前だけを検出する。
+amber_ladder
+cinder_cove
+iguana_necktie
+nimbus_quill
+omelette_promotional
+seven_day_omelette
+tangelo
+codex_bengalfox
+GPT-5.3-Codex-Spark
+
+# 除外: seven_day_oauth_apps / seven_day_cowork
+# ClaudeOAuthUsageDecoder がデコードに使う記述的フィールド名のため。
+# 除外: Fable
+# 公開済みの製品名で、非公開情報ではないため。
+# 除外: SomeModel / some-model
+# 本プロジェクトが作ったテスト専用値で、実 API 由来ではないため。
+# 除外: codex / id / limit / model / used など
+# 汎用語であり、検出語にすると配布物が恒久的に失敗するため。

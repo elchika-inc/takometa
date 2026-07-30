@@ -1,0 +1,10 @@
+{
+  "rateLimitsByLimitId": {
+    "codex": {
+      "limitId": "codex", "limitName": null,
+      "primary": {"windowDurationMins": 300, "resetsAt": 1784963502},
+      "secondary": null
+    },
+    "codex_empty": {"limitId": "codex_empty", "limitName": "Empty", "primary": null}
+  }
+}

@@ -1,0 +1,3 @@
+# Takometa-<version>/ 直下の完全な期待集合。
+Takometa.app
+はじめにお読みください.txt

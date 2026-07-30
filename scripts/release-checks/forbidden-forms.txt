@@ -1,0 +1,5 @@
+# 同梱案内で禁止する拡張正規表現。1行1パターン。
+(^|[^[:alnum:]_])xattr([[:space:]]+-[[:alnum:]]+)*[[:space:]]+(-[[:alnum:]]*c[[:alnum:]]*|--clear)([^[:alnum:]_]|$)
+(^|[^[:alnum:]_])sudo([^[:alnum:]_]|$)
+spctl.*(--master-disable|--global-disable)
+[[:xdigit:]]{64}

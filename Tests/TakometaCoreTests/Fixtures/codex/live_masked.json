@@ -1,0 +1,60 @@
+{
+  "rateLimitResetCredits" : {
+    "availableCount" : 0,
+    "credits" : [
+
+    ]
+  },
+  "rateLimits" : {
+    "credits" : {
+      "balance" : "0",
+      "hasCredits" : false,
+      "unlimited" : false
+    },
+    "individualLimit" : null,
+    "limitId" : "codex",
+    "limitName" : null,
+    "planType" : "prolite",
+    "primary" : {
+      "resetsAt" : 1784963502,
+      "usedPercent" : 49,
+      "windowDurationMins" : 10080
+    },
+    "rateLimitReachedType" : null,
+    "secondary" : null
+  },
+  "rateLimitsByLimitId" : {
+    "codex" : {
+      "credits" : {
+        "balance" : "0",
+        "hasCredits" : false,
+        "unlimited" : false
+      },
+      "individualLimit" : null,
+      "limitId" : "codex",
+      "limitName" : null,
+      "planType" : "prolite",
+      "primary" : {
+        "resetsAt" : 1784963502,
+        "usedPercent" : 49,
+        "windowDurationMins" : 10080
+      },
+      "rateLimitReachedType" : null,
+      "secondary" : null
+    },
+    "codex_bengalfox" : {
+      "credits" : null,
+      "individualLimit" : null,
+      "limitId" : "codex_bengalfox",
+      "limitName" : "GPT-5.3-Codex-Spark",
+      "planType" : "prolite",
+      "primary" : {
+        "resetsAt" : 1785070352,
+        "usedPercent" : 0,
+        "windowDurationMins" : 10080
+      },
+      "rateLimitReachedType" : null,
+      "secondary" : null
+    }
+  }
+}
