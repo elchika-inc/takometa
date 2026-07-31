@@ -2,7 +2,7 @@
 
 > Codex と Claude Code のレート制限を macOS メニューバーで常時確認できる常駐アプリ
 
-[![standards](https://img.shields.io/badge/standards-2026--07--18_(rev.35)-blue)](https://github.com/naoto24kawa/standards/blob/main/CHANGELOG.md)
+[![standards](https://img.shields.io/badge/standards-2026--07--18_(rev.35)-blue)](https://github.com/elchika-inc/standards/blob/main/CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 タコメーター（回転計）× タコ 🐙 のダブルミーニング。AI コーディングエージェントの5時間枠・週間枠・モデル固有枠の使用率を、メニューバーで確認できる個人向けネイティブアプリです。
