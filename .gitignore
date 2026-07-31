@@ -20,3 +20,13 @@ dist/
 *.secret.*
 .env
 .env.*
+
+# エージェントが生成するローカル専用の作業物。マシン固有の絶対パス・エージェント名・
+# 一時状態を含み、他の環境では意味を持たないためリポジトリに含めない。
+# ローカルには配置したままでよい（ignore は追跡対象から外すだけで、削除はしない）。
+.codex/
+.superpowers/
+docs/superpowers/
+.worktrees/
+.claude/worktrees/
+.playwright-mcp/
