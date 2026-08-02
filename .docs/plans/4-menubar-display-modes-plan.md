@@ -177,13 +177,36 @@ func testLegacyCompactInFileLoadsAsBalancedAndPersistsNewRawValue() throws {
 }
 ```
 
+- [ ] **Step 6.5: 既存テストの期待値を新しい意味へ追随させる**
+
+既存テストのうち、旧リテラル（`"compact"` / `"balanced"`）を書いて旧来の意味を期待しているものは、移行写像の導入で必ず落ちる。これらは displayMode の値そのものを検証対象にしておらず、設定ファイルの読み書き挙動（未対応 version での read-only、version 型不正、version 欠落、不正値のフォールバック、保存形式）を検証している。displayMode はその素材にすぎないため、**期待値を新しい意味へ追随させる。テストの意図は変えない**。
+
+行番号は編集でずれるのでテスト関数名で特定すること。
+
+| ファイル | テスト | 変更 |
+|---|---|---|
+| `SettingsStoreTests.swift` | `testUnknownVersionLoadsKnownValuesButInitAndUpdatesPreserveOriginalBytes` | `XCTAssertEqual(store.displayMode, .compact)` → `.balanced` |
+| `SettingsStoreTests.swift` | `testVersionTypeMismatchIsUnknownVersionReadOnly` | `XCTAssertEqual(store.displayMode, .balanced)` → `.full` |
+| `SettingsStoreTests.swift` | 不正な displayMode 値のフォールバックを検証するテスト（`updateDisplayMode(.balanced)` 直後に保存値を見ている箇所） | `XCTAssertEqual(saved["displayMode"] as? String, "balanced")` → `"onePerProvider"` |
+| `SettingsStoreTests.swift` | `testMissingVersionActsAsVersionOneAndCanSave` | `XCTAssertEqual(store.displayMode, .compact)` → `.balanced` |
+| `SettingsMigrationTests.swift` | version 1 かつ displayMode `"compact"` の JSON を `SettingsStore` で読むテスト | `XCTAssertEqual(loaded.displayMode, .compact)` → `.balanced` |
+
+この5件は静的に特定したもので網羅を保証しない。Step 7 の実行結果で落ちた箇所を同じ方針で更新する。ただし次に当たるテストが落ちた場合は、更新せず停止して依頼元へ報告する。
+
+- displayMode の値そのものが検証対象になっているテスト（移行の是非を問うテスト）
+- 期待値を更新するとテストの意図（read-only・バイト保持・フォールバック等）が変わってしまうテスト
+
+`DisplayMode.compact.rawValue` のようにシンボル経由で書かれた箇所は rawValue 変更に自動追随するため通るはずである。通らない場合は想定と実態が食い違っているので停止して報告する。
+
 - [ ] **Step 7: テスト全体を通す**
 
 ```bash
 swift test
 ```
 
-期待: 全 PASS。既存の `testUpdateSavesAtomicallyAndReloadRoundTrips`（`SettingsStoreTests.swift:22`）は `.balanced` をシンボルで扱うため、rawValue 変更後もそのまま通る。
+期待: 全 PASS（Step 6.5 の期待値更新を含めて達成する条件とする）。既存の `testUpdateSavesAtomicallyAndReloadRoundTrips`（`SettingsStoreTests.swift:22`）は `.balanced` をシンボルで扱うため、rawValue 変更後もそのまま通る。
+
+なお未編集時点のベースラインは `swift build` exit 0 / `swift test` 486 tests・0 failures（2026-08-02 実測）。ここから増えた失敗のみが今回の変更由来である。
 
 - [ ] **Step 8: コミット**
 
