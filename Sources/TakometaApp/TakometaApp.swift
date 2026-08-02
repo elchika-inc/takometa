@@ -29,13 +29,10 @@ struct TimerScheduler: UsageScheduler, Sendable {
 
 @main
 struct TakometaApp: App {
-    /// Window シーンの宣言側と openWindow(id:) の呼び出し側で共有する。
-    /// literal を2か所に置くと、片方だけ変えたときに黙って開かなくなる。
-    static let panelWindowID = "takometa-panel"
-
     @State private var store: UsageStore
     @State private var settingsStore: SettingsStore
     @State private var notificationDispatcher: NotificationDispatcher
+    @State private var panelController: FloatingPanelController
 
     init() {
         let settingsStore = SettingsStore()
@@ -44,15 +41,21 @@ struct TakometaApp: App {
             CodexUsageProvider(scheduler: scheduler),
             ClaudeUsageProvider(credentials: ClaudeCredentialsReader()),
         ]
-        _store = State(initialValue: UsageStoreFactory.production(
+        let store = UsageStoreFactory.production(
             providers: providers,
             cache: SnapshotCache(),
             scheduler: scheduler,
             notificationSettings: SettingsSupply.notificationSettings(
                 from: settingsStore.providers),
-            statusProvider: ServiceStatusFetcher()))
+            statusProvider: ServiceStatusFetcher())
+        _store = State(initialValue: store)
         _settingsStore = State(initialValue: settingsStore)
         _notificationDispatcher = State(initialValue: NotificationDispatcher())
+        _panelController = State(initialValue: FloatingPanelController(
+            settingsStore: settingsStore,
+            makeContent: {
+                AnyView(ProviderPopoverView(store: store, settingsStore: settingsStore))
+            }))
     }
 
     var body: some Scene {
@@ -70,7 +73,7 @@ struct TakometaApp: App {
                     notificationDispatcher.send(store.consumePendingNotifications())
                 }
                 .modifier(FloatingPanelPresenter(
-                    windowID: Self.panelWindowID,
+                    controller: panelController,
                     isPresented: settingsStore.showsFloatingPanel))
         }
         .menuBarExtraStyle(.window)
@@ -81,50 +84,27 @@ struct TakometaApp: App {
                 settingsStore: settingsStore,
                 notificationDispatcher: notificationDispatcher)
         }
-
-        Window("Takometa", id: Self.panelWindowID) {
-            ProviderPopoverView(store: store, settingsStore: settingsStore)
-                .onDisappear {
-                    settingsStore.updateShowsFloatingPanel(false)
-                }
-        }
-        .windowLevel(.floating)
-        .windowResizability(.contentSize)
     }
 }
 
-@MainActor
-func presentFloatingPanel(activate: () -> Void, open: () -> Void) {
-    activate()
-    open()
-}
-
-/// 設定を正本として窓の開閉を追従させる。openWindow / dismissWindow は
-/// View の Environment からしか取れないため、label 側へ寄せている。
+/// 設定を正本としてパネルの表示を追従させる。パネル本体は SwiftUI の
+/// `Window` シーンではなく `FloatingPanelController`（NSPanel）が管理する。
+/// 理由は同コントローラの doc コメントを参照（Issue #11）。
 private struct FloatingPanelPresenter: ViewModifier {
-    let windowID: String
+    let controller: FloatingPanelController
     let isPresented: Bool
-
-    @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismissWindow) private var dismissWindow
 
     func body(content: Content) -> some View {
         content
             .task {
-                if isPresented { showPanel() }
+                if isPresented { controller.show() }
             }
             .onChange(of: isPresented, initial: false) { _, shows in
                 if shows {
-                    showPanel()
+                    controller.show()
                 } else {
-                    dismissWindow(id: windowID)
+                    controller.hide()
                 }
             }
-    }
-
-    private func showPanel() {
-        presentFloatingPanel(
-            activate: { NSApp.activate(ignoringOtherApps: true) },
-            open: { openWindow(id: windowID) })
     }
 }
