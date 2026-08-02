@@ -297,6 +297,45 @@ func testBalancedKeepsSingleWindowColumnPerProvider() {
 }
 ```
 
+- [ ] **Step 2.5: 旧 Balanced の仕様に依存する既存テストを更新する**
+
+旧 `.balanced`（モデル枠1個 + basics）の出力に依存している既存テストが4件あり、いずれも新仕様では落ちる。
+
+**1件目は目的を反転させる。** `testBalancedAppliesKindOrder` は「Balanced で枠種別の並び順が波及する」ことを検証しているが、新 Balanced は1枠のみを出すため並び順は出力に影響しない。既存の `testCompactIsUnaffectedByKindOrder`（`:129`）と同型に置き換える。
+
+```swift
+    // 新しい Balanced は最逼迫1枠だけを出すため、枠種別の並び順は出力に影響しない。
+    // 旧 Balanced（モデル枠1個 + basics）では kindOrder が波及していたが、その仕様は廃止された。
+    func testBalancedIsUnaffectedByKindOrder() {
+        let permutations: [[WindowKindCategory]] = [
+            [.session, .weekly, .model], [.session, .model, .weekly],
+            [.weekly, .session, .model], [.weekly, .model, .session],
+            [.model, .session, .weekly], [.model, .weekly, .session],
+        ]
+        let baseline = format(fullSet(), mode: .balanced).text
+        for order in permutations {
+            XCTAssertEqual(
+                format(fullSet(), mode: .balanced, kindOrder: order).text, baseline,
+                "order: \(order)")
+        }
+    }
+```
+
+**残り3件は期待値のみ追随させる。** これらはフィルタが全モードより先に効くことが主目的で、期待出力はその副産物である。`.full` と `.compact` の行は変更しない。
+
+| テスト | balanced の期待値 |
+|---|---|
+| `testCombinedSessionFilterRunsBeforeEveryDisplayMode` | `"CX W52\|G78"` → `"CX G78"` |
+| `testCombinedWeeklyFilterRunsBeforeEveryDisplayMode` | `"CX H34\|G78"` → `"CX G78"` |
+| `testCombinedModelFilterRunsBeforeEveryDisplayMode` | `"CX 34\|52"` → `"CX W52"` |
+
+いずれも同テスト内の `.compact` 行と同じ値になる。これは意図した結果で、テキスト経路の `.compact` が balanced 相当へフォールバックする契約（Step 4 の `case .compact`）を固定する。重複に見えても削除しないこと。
+
+さらに落ちるテストがあれば次の区別で扱う。
+
+- 期待出力が副産物であるテスト（フィルタ・順序・鮮度など別の性質が主目的） → 期待値を新仕様へ追随させる
+- 廃止された仕様そのものを検証しているテスト → 停止して依頼元へ報告する（目的の反転が必要な可能性がある）
+
 - [ ] **Step 3: テストが失敗することを確認する**
 
 ```bash
