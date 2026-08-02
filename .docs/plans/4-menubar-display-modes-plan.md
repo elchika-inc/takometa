@@ -153,14 +153,16 @@ swift test --filter SettingsMigrationTests
 
 - [ ] **Step 6: JSON 経路の移行テストを追加する**
 
-`Tests/TakometaCoreTests/SettingsStoreTests.swift` のクラス内に追加する。既存の `withTemporaryDirectory` / `makeStore` / `jsonObject(in:)` ヘルパーを使う。
+`Tests/TakometaCoreTests/SettingsStoreTests.swift` のクラス内に追加する。既存の `withTemporaryDirectory` / `writeJSON` / `makeStore` / `jsonObject(in:)` ヘルパーを使う。
+
+**fixture は必ず `writeJSON` で書くこと。** `withTemporaryDirectory`（`:513`）は URL を返すだけでディレクトリの実体を作らない。実体を作るのは `writeData`（`:540`）で、ここが `createDirectory` と `settingsURL(in:)` の両方を解決している。直接 `Data.write` すると親ディレクトリがなく `ENOENT` になり、さらにファイル名を literal で持つと正本（`SettingsStore.fileName`、`:16`）から乖離してテストが黙って別ファイルを見る。
 
 ```swift
 func testLegacyCompactInFileLoadsAsBalancedAndPersistsNewRawValue() throws {
     try withTemporaryDirectory { directory in
-        let url = directory.appendingPathComponent("provider-settings.json")
-        let legacy: [String: Any] = ["version": 1, "displayMode": "compact"]
-        try JSONSerialization.data(withJSONObject: legacy).write(to: url)
+        try writeJSON("""
+        {"version":1,"displayMode":"compact","providerOrder":["codex","claude"],"providers":{}}
+        """, in: directory)
 
         let store = try makeStore(directory: directory)
         XCTAssertEqual(store.displayMode, .balanced)
@@ -177,13 +179,41 @@ func testLegacyCompactInFileLoadsAsBalancedAndPersistsNewRawValue() throws {
 }
 ```
 
+このテストが依拠している既存挙動（いずれも実測で確認済み）:
+
+- `SettingsStore.save()`（`:143`）が `object["displayMode"] = displayMode.rawValue` を無条件に書くため、`update(provider:)` だけで displayMode も新 rawValue へ書き換わる。`updateDisplayMode` の明示呼び出しは不要
+- `decodeDocument` は providers が空でも `knownProviderIDs` で既定値を補完するため `"providers":{}` で足りる
+
+- [ ] **Step 6.5: 既存テストの期待値を新しい意味へ追随させる**
+
+既存テストのうち、旧リテラル（`"compact"` / `"balanced"`）を書いて旧来の意味を期待しているものは、移行写像の導入で必ず落ちる。これらは displayMode の値そのものを検証対象にしておらず、設定ファイルの読み書き挙動（未対応 version での read-only、version 型不正、version 欠落、不正値のフォールバック、保存形式）を検証している。displayMode はその素材にすぎないため、**期待値を新しい意味へ追随させる。テストの意図は変えない**。
+
+行番号は編集でずれるのでテスト関数名で特定すること。
+
+| ファイル | テスト | 変更 |
+|---|---|---|
+| `SettingsStoreTests.swift` | `testUnknownVersionLoadsKnownValuesButInitAndUpdatesPreserveOriginalBytes` | `XCTAssertEqual(store.displayMode, .compact)` → `.balanced` |
+| `SettingsStoreTests.swift` | `testVersionTypeMismatchIsUnknownVersionReadOnly` | `XCTAssertEqual(store.displayMode, .balanced)` → `.full` |
+| `SettingsStoreTests.swift` | 不正な displayMode 値のフォールバックを検証するテスト（`updateDisplayMode(.balanced)` 直後に保存値を見ている箇所） | `XCTAssertEqual(saved["displayMode"] as? String, "balanced")` → `"onePerProvider"` |
+| `SettingsStoreTests.swift` | `testMissingVersionActsAsVersionOneAndCanSave` | `XCTAssertEqual(store.displayMode, .compact)` → `.balanced` |
+| `SettingsMigrationTests.swift` | version 1 かつ displayMode `"compact"` の JSON を `SettingsStore` で読むテスト | `XCTAssertEqual(loaded.displayMode, .compact)` → `.balanced` |
+
+この5件は静的に特定したもので網羅を保証しない。Step 7 の実行結果で落ちた箇所を同じ方針で更新する。ただし次に当たるテストが落ちた場合は、更新せず停止して依頼元へ報告する。
+
+- displayMode の値そのものが検証対象になっているテスト（移行の是非を問うテスト）
+- 期待値を更新するとテストの意図（read-only・バイト保持・フォールバック等）が変わってしまうテスト
+
+`DisplayMode.compact.rawValue` のようにシンボル経由で書かれた箇所は rawValue 変更に自動追随するため通るはずである。通らない場合は想定と実態が食い違っているので停止して報告する。
+
 - [ ] **Step 7: テスト全体を通す**
 
 ```bash
 swift test
 ```
 
-期待: 全 PASS。既存の `testUpdateSavesAtomicallyAndReloadRoundTrips`（`SettingsStoreTests.swift:22`）は `.balanced` をシンボルで扱うため、rawValue 変更後もそのまま通る。
+期待: 全 PASS（Step 6.5 の期待値更新を含めて達成する条件とする）。既存の `testUpdateSavesAtomicallyAndReloadRoundTrips`（`SettingsStoreTests.swift:22`）は `.balanced` をシンボルで扱うため、rawValue 変更後もそのまま通る。
+
+なお未編集時点のベースラインは `swift build` exit 0 / `swift test` 486 tests・0 failures（2026-08-02 実測）。ここから増えた失敗のみが今回の変更由来である。
 
 - [ ] **Step 8: コミット**
 
@@ -266,6 +296,45 @@ func testBalancedKeepsSingleWindowColumnPerProvider() {
     XCTAssertEqual(result.groups[0][1].value, "65")
 }
 ```
+
+- [ ] **Step 2.5: 旧 Balanced の仕様に依存する既存テストを更新する**
+
+旧 `.balanced`（モデル枠1個 + basics）の出力に依存している既存テストが4件あり、いずれも新仕様では落ちる。
+
+**1件目は目的を反転させる。** `testBalancedAppliesKindOrder` は「Balanced で枠種別の並び順が波及する」ことを検証しているが、新 Balanced は1枠のみを出すため並び順は出力に影響しない。既存の `testCompactIsUnaffectedByKindOrder`（`:129`）と同型に置き換える。
+
+```swift
+    // 新しい Balanced は最逼迫1枠だけを出すため、枠種別の並び順は出力に影響しない。
+    // 旧 Balanced（モデル枠1個 + basics）では kindOrder が波及していたが、その仕様は廃止された。
+    func testBalancedIsUnaffectedByKindOrder() {
+        let permutations: [[WindowKindCategory]] = [
+            [.session, .weekly, .model], [.session, .model, .weekly],
+            [.weekly, .session, .model], [.weekly, .model, .session],
+            [.model, .session, .weekly], [.model, .weekly, .session],
+        ]
+        let baseline = format(fullSet(), mode: .balanced).text
+        for order in permutations {
+            XCTAssertEqual(
+                format(fullSet(), mode: .balanced, kindOrder: order).text, baseline,
+                "order: \(order)")
+        }
+    }
+```
+
+**残り3件は期待値のみ追随させる。** これらはフィルタが全モードより先に効くことが主目的で、期待出力はその副産物である。`.full` と `.compact` の行は変更しない。
+
+| テスト | balanced の期待値 |
+|---|---|
+| `testCombinedSessionFilterRunsBeforeEveryDisplayMode` | `"CX W52\|G78"` → `"CX G78"` |
+| `testCombinedWeeklyFilterRunsBeforeEveryDisplayMode` | `"CX H34\|G78"` → `"CX G78"` |
+| `testCombinedModelFilterRunsBeforeEveryDisplayMode` | `"CX 34\|52"` → `"CX W52"` |
+
+いずれも同テスト内の `.compact` 行と同じ値になる。これは意図した結果で、テキスト経路の `.compact` が balanced 相当へフォールバックする契約（Step 4 の `case .compact`）を固定する。重複に見えても削除しないこと。
+
+さらに落ちるテストがあれば次の区別で扱う。
+
+- 期待出力が副産物であるテスト（フィルタ・順序・鮮度など別の性質が主目的） → 期待値を新仕様へ追随させる
+- 廃止された仕様そのものを検証しているテスト → 停止して依頼元へ報告する（目的の反転が必要な可能性がある）
 
 - [ ] **Step 3: テストが失敗することを確認する**
 
