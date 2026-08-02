@@ -130,7 +130,7 @@ public struct SettingsDocument: Sendable, Equatable {
 }
 ```
 
-- [ ] **Step 4: SettingsStore の8箇所を変更する**
+- [ ] **Step 4: SettingsStore の9箇所を変更する**
 
 `Sources/TakometaCore/Settings/SettingsStore.swift` を順に変更する。**`menuBarLineCount` を書いている箇所の直後に、同じ形で `showsFloatingPanel` を足す**のが基本方針。
 
