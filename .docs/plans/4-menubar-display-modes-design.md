@@ -156,24 +156,32 @@ UsageStore ─→ MenuBarLabelView
 
 回避には「移行済みだと分かる印」が要る。印の置き場所はスキーマバージョンか値そのものの2択。
 
-### 5.2 採用案 — `.compact` の rawValue を `"icon"` にする
+### 5.2 採用案 — 意味が変わった case の rawValue をすべて変える
+
+移行規則は「保存文字列 → モード」の写像である。同じ文字列が旧版と新版で異なる意味を持つと、この写像は関数として定義できない。したがって**意味が変わったすべての case に新しい rawValue を与える**。意味が変わらない `.full` だけは `"full"` を維持する。
 
 ```swift
 public enum DisplayMode: String, Sendable, CaseIterable {
-    case full                  // "full"
-    case balanced              // "balanced"
-    // rawValue が case 名と異なるのは意図的。旧版の "compact"（＝最逼迫1枠）と
-    // 新しいアイコン表示を永続化層で区別し、移行を冪等にするため。
-    case compact = "icon"
+    case full                          // "full" ─ 意味不変
+    // 以下2つは rawValue が case 名と異なる。旧版の同名の値と意味がずれたため、
+    // 永続化層で新旧を区別できるようにする（5.1 の冪等性のため）。
+    case balanced = "onePerProvider"   // 旧 "balanced"（モデル枠1個）とは別物
+    case compact = "icon"              // 旧 "compact"（最逼迫1枠）とは別物
 }
 ```
 
-| 保存値 | 読み込み結果 | 出力の変化 | 冪等性 |
+| 保存値 | 読み込み結果 | 出力の変化 | 保存し直される値 |
 |---|---|---|---|
-| `"compact"`（旧） | `.balanced` | なし（`CL W65` のまま） | 保存時 `"balanced"` となり以降は下の行へ入る |
-| `"balanced"`（旧） | `.full` | **条件付き**（下記 5.4） | 形式上は非冪等だが、保存値が `"full"` となり1段で停止する |
-| `"full"` | `.full` | なし | 冪等 |
-| `"icon"`（新） | `.compact` | ─ | 冪等 |
+| `"compact"`（旧） | `.balanced` | なし（`CL W65` のまま） | `"onePerProvider"` |
+| `"balanced"`（旧） | `.full` | **条件付き**（下記 5.4） | `"full"` |
+| `"full"` | `.full` | なし | `"full"` |
+| `"onePerProvider"`（新） | `.balanced` | ─ | `"onePerProvider"` |
+| `"icon"`（新） | `.compact` | ─ | `"icon"` |
+| 上記以外・欠落 | `.full` | ─ | `"full"` |
+
+旧値と新値がすべて異なる文字列になるため、**写像は完全に冪等**になる。何度読み書きしてもモードは移動しない。
+
+`.compact` の rawValue だけを変える案では不十分だった。新 `.balanced` の rawValue が `"balanced"` のままだと、ユーザーが移行後に Balanced を選んだ時点で `"balanced"` が保存され、次回起動で「旧 balanced → `.full`」の規則が適用されてしまう。Balanced に留まれず毎回 Full へ化けるため、新 Balanced が事実上選択不能になる。
 
 新しいアイコン表示は自発的に選んだときのみ有効になる。
 
@@ -189,6 +197,39 @@ public enum DisplayMode: String, Sendable, CaseIterable {
 2026-08-02 時点の実データ（`Tests/TakometaCoreTests/Fixtures/claude/live_masked.json`）では、Claude のモデル固有枠は Fable の1個、Codex は `secondary: null` で0個。したがって現時点の実環境では出力は変わらない。Claude が2個以上返すようになった時点で幅が増える。
 
 移行先を `.balanced`（1枠）ではなく `.full` にしたのは、旧 `balanced` 利用者が許容していた幅に近いのが `.full` だからである。幅を能動的に減らしたい場合は、移行後に `.balanced` または `.compact` を選び直せばよい。
+
+### 5.5 読み取り経路は2箇所ある
+
+`DisplayMode.init(rawValue:)` を使って永続値を解釈している箇所は次の2つで、**両方に移行規則を適用する**必要がある。
+
+| 経路 | 位置 | 読み元 |
+|---|---|---|
+| JSON 設定ファイル | `Sources/TakometaCore/Settings/SettingsStore.swift:174` | `provider-settings.json` |
+| UserDefaults からの移行 | `Sources/TakometaCore/Notification/NotificationSettingsLoader.swift:24` | 旧版の `UserDefaults` |
+
+後者を漏らすと、UserDefaults 時代の `"compact"` が新しい rawValue のいずれにも一致せず `?? .full` へ落ちる。幅を最小にしていた利用者が最大幅になり、本 Issue の目的と正反対の結果になる。
+
+規則の重複実装を避けるため、写像は `DisplayMode` の static メソッドとして1箇所に置き、両経路から呼ぶ。
+
+```swift
+extension DisplayMode {
+    /// 永続化された文字列からモードを復元する。
+    /// 旧版の値（"compact" = 最逼迫1枠 / "balanced" = モデル枠1個）は
+    /// 新しい体系へ1段繰り上げて解釈する（5.2 の表を参照）。
+    public static func fromPersistedValue(_ raw: String?) -> DisplayMode {
+        switch raw {
+        case DisplayMode.full.rawValue: return .full
+        case DisplayMode.balanced.rawValue: return .balanced
+        case DisplayMode.compact.rawValue: return .compact
+        case "compact": return .balanced   // 旧版
+        case "balanced": return .full      // 旧版（5.4）
+        default: return .full
+        }
+    }
+}
+```
+
+なお `SettingsMigrationTests.swift:26` は `DisplayMode.compact.rawValue` とシンボル経由で値を書いているため、rawValue を変更してもこのテストは緑のまま通る。移行の回帰は**リテラル文字列を直接使うテスト**（7.2）でしか捕まえられない。
 
 ### 5.3 設定ファイルの version は 1 のまま据え置く
 
@@ -221,10 +262,14 @@ if settingsStore.displayMode == .compact {
 
 ### 7.2 移行の冪等性（既存 `SettingsMigrationTests` に追加）
 
-- `"compact"` を読む → `.balanced` → 保存 → `"balanced"` → 再読込 → `.balanced` のまま
-- `"balanced"` を読む → `.full` → 保存 → `"full"` → 再読込 → `.full`
-- `"icon"` を読む → `.compact`
+**リテラル文字列を直接書く**こと。`DisplayMode.compact.rawValue` のようにシンボル経由で書くと rawValue の変更に追従してしまい、移行の回帰を検出できない（5.5）。
+
+- `"compact"` → `.balanced` → 保存値 `"onePerProvider"` → 再読込 → `.balanced` のまま
+- `"balanced"` → `.full` → 保存値 `"full"` → 再読込 → `.full` のまま
+- `"onePerProvider"` → `.balanced`（新値がそのまま読めること）
+- `"icon"` → `.compact`
 - 未知の値 → `.full` へフォールバック（既存挙動の維持）
+- 上記を **JSON 経路（`SettingsStore`）と UserDefaults 経路（`NotificationSettingsLoader`）の両方**で確認する
 
 ### 7.3 回帰の要（既存 `MenuBarLabelFormatterTests` の付け替え）
 
@@ -239,8 +284,9 @@ if settingsStore.displayMode == .compact {
 | ファイル | 変更 |
 |---|---|
 | `Sources/TakometaCore/Label/MenuBarIcons.swift` | 新規（型＋量子化） |
-| `Sources/TakometaCore/Label/MenuBarLabelFormatter.swift` | `select` の分岐整理、`formatCombinedIcons` 追加 |
-| `Sources/TakometaCore/Settings/SettingsStore.swift` | `DisplayMode` の rawValue 移行 |
+| `Sources/TakometaCore/Label/MenuBarLabelFormatter.swift` | `DisplayMode`（`:3` に定義）の rawValue 変更と `fromPersistedValue` 追加、`select` の分岐整理、`formatCombinedIcons` 追加 |
+| `Sources/TakometaCore/Settings/SettingsStore.swift` | JSON 経路を `fromPersistedValue` へ差し替え（`:174`） |
+| `Sources/TakometaCore/Notification/NotificationSettingsLoader.swift` | UserDefaults 経路を `fromPersistedValue` へ差し替え（`:24`） |
 | `Sources/TakometaApp/MenuBarLabelView.swift` | 3分岐化、`MenuBarIconsView` 追加 |
 | `Sources/TakometaApp/SettingsView.swift` | 行数 Picker の無効化＋説明 |
 | `Tests/TakometaCoreTests/MenuBarIconsTests.swift` | 新規 |
@@ -254,10 +300,10 @@ if settingsStore.displayMode == .compact {
 |---|---|---|
 | 1 | 針の角度がメニューバーサイズ（約18pt）で判別できるか未検証。33% と 50% の差が読めない恐れ | `GaugeLevel` の量子化関数1つの変更で3段階（`0/50/100percent`）へ縮退できる設計にしてある |
 | 2 | stale の `opacity 0.45` と warning の橙が紛らわしい恐れ | 実機確認で不透明度を調整する |
-| 3 | 旧 `"balanced"` → `.full` の移行が形式上は非冪等 | 1段で停止することを 7.2 のテストで固定する |
-| 4 | 旧 `balanced` 利用者は、モデル固有枠が2個以上になった時点で表示が1枠増える（5.4）。現在の設定値は `balanced` であり該当する | 2026-08-02 時点の実データではモデル枠が1個以下のため実害なし。増えた時点で `.balanced` / `.compact` を選び直せる。7.3 のテストでこの挙動を固定する |
+| 3 | 旧 `balanced` 利用者は、モデル固有枠が2個以上になった時点で表示が1枠増える（5.4）。現在の設定値は `balanced` であり該当する | 2026-08-02 時点の実データではモデル枠が1個以下のため実害なし。増えた時点で `.balanced` / `.compact` を選び直せる。7.3 のテストでこの挙動を固定する |
+| 4 | 旧版の Takometa で新しい設定ファイルを開くと、`"onePerProvider"` / `"icon"` が未知の値となり `.full` として扱われる | 設定ファイルの `version` は 1 のままなので保存自体は継続でき、破壊は起きない（5.3）。ダウングレードは想定外の操作として受容する |
 
-1〜2は実機確認が必要な項目であり、実装後の検証で判定する。
+1〜2は実機確認が必要な項目であり、実装後の検証で判定する。5.2 の rawValue 全面変更により、移行写像は完全に冪等となった。
 
 ## 10. スコープ外
 
