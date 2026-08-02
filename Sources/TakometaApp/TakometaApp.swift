@@ -28,6 +28,10 @@ struct TimerScheduler: UsageScheduler, Sendable {
 
 @main
 struct TakometaApp: App {
+    /// Window シーンの宣言側と openWindow(id:) の呼び出し側で共有する。
+    /// literal を2か所に置くと、片方だけ変えたときに黙って開かなくなる。
+    static let panelWindowID = "takometa-panel"
+
     @State private var store: UsageStore
     @State private var settingsStore: SettingsStore
     @State private var notificationDispatcher: NotificationDispatcher
@@ -64,6 +68,9 @@ struct TakometaApp: App {
                     guard !events.isEmpty else { return }
                     notificationDispatcher.send(store.consumePendingNotifications())
                 }
+                .modifier(FloatingPanelPresenter(
+                    windowID: Self.panelWindowID,
+                    isPresented: settingsStore.showsFloatingPanel))
         }
         .menuBarExtraStyle(.window)
 
@@ -72,6 +79,32 @@ struct TakometaApp: App {
                 store: store,
                 settingsStore: settingsStore,
                 notificationDispatcher: notificationDispatcher)
+        }
+
+        Window("Takometa", id: Self.panelWindowID) {
+            ProviderPopoverView(store: store, settingsStore: settingsStore)
+        }
+        .windowLevel(.floating)
+        .windowResizability(.contentSize)
+    }
+}
+
+/// 設定を正本として窓の開閉を追従させる。openWindow / dismissWindow は
+/// View の Environment からしか取れないため、label 側へ寄せている。
+private struct FloatingPanelPresenter: ViewModifier {
+    let windowID: String
+    let isPresented: Bool
+
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    func body(content: Content) -> some View {
+        content.onChange(of: isPresented, initial: false) { _, shows in
+            if shows {
+                openWindow(id: windowID)
+            } else {
+                dismissWindow(id: windowID)
+            }
         }
     }
 }

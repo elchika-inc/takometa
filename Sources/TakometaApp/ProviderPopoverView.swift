@@ -33,6 +33,12 @@ struct ProviderPopoverView: View {
                 .foregroundStyle(.secondary)
 
                 Spacer()
+                Button(
+                    settingsStore.showsFloatingPanel ? "パネルを隠す" : "パネルを表示",
+                    systemImage: "macwindow"
+                ) {
+                    settingsStore.updateShowsFloatingPanel(!settingsStore.showsFloatingPanel)
+                }
                 SettingsLink {
                     Label("設定", systemImage: "gearshape")
                 }
