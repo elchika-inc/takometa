@@ -144,7 +144,8 @@ private struct MenuBarSegmentView: View {
     }
 }
 
-private struct MenuBarIconsView: View {
+// テストから ImageRenderer で描画して stale の減光を画素で検証するため internal（#6）
+struct MenuBarIconsView: View {
     let icons: MenuBarIcons
 
     var body: some View {
