@@ -21,8 +21,7 @@ public enum NotificationSettingsLoader {
 
     public static func migrate(from defaults: UserDefaults) -> SettingsDocument {
         SettingsDocument(
-            displayMode: defaults.string(forKey: displayModeKey)
-                .flatMap(DisplayMode.init(rawValue:)) ?? .full,
+            displayMode: DisplayMode.fromPersistedValue(defaults.string(forKey: displayModeKey)),
             providers: [
                 ProviderID.codex.rawValue: providerSettings(
                     from: defaults,

@@ -140,10 +140,20 @@ final class MenuBarLabelFormatterTests: XCTestCase {
         }
     }
 
-    func testBalancedAppliesKindOrder() {
-        XCTAssertEqual(
-            format(fullSet(), mode: .balanced, kindOrder: [.model, .session, .weekly]).text,
-            "CX G78|H34|W52")
+    // 新しい Balanced は最逼迫1枠だけを出すため、枠種別の並び順は出力に影響しない。
+    // 旧 Balanced（モデル枠1個 + basics）では kindOrder が波及していたが、その仕様は廃止された。
+    func testBalancedIsUnaffectedByKindOrder() {
+        let permutations: [[WindowKindCategory]] = [
+            [.session, .weekly, .model], [.session, .model, .weekly],
+            [.weekly, .session, .model], [.weekly, .model, .session],
+            [.model, .session, .weekly], [.model, .weekly, .session],
+        ]
+        let baseline = format(fullSet(), mode: .balanced).text
+        for order in permutations {
+            XCTAssertEqual(
+                format(fullSet(), mode: .balanced, kindOrder: order).text, baseline,
+                "order: \(order)")
+        }
     }
 
     // 設計書「formatCombined への伝播」と「provider ごとの独立性」を1件で担保する:
@@ -327,22 +337,22 @@ final class MenuBarLabelFormatterTests: XCTestCase {
         XCTAssertEqual(label.text, "CX G78|G65")
     }
 
-    func testBalancedShowsBasicsAndMostConstrainedNonBasic() {
+    func testLegacyBalancedInputRendersAsFullAfterMigration() {
         let label = format([
             window(id: "session", scope: .session, used: 34, kind: .session),
             window(id: "weekly", scope: .weeklyAll, used: 52),
             window(id: "g", scope: .model(id: "g", displayName: "GPT"), used: 78),
             window(id: "f", scope: .model(id: "f", displayName: "Fable"), used: 65),
             window(id: "o", scope: .model(id: "o", displayName: "Opus"), used: 40),
-        ], mode: .balanced)
-        XCTAssertEqual(label.text, "CX 34|52|G78")
+        ], mode: .full)
+        XCTAssertEqual(label.text, "CX 34|52|G78|F65 +1")
     }
 
-    func testCompactShowsMostConstrainedBasicWithKindPrefix() {
+    func testBalancedShowsMostConstrainedBasicWithKindPrefix() {
         let label = format([
             window(id: "session", scope: .session, used: 34, kind: .session),
             window(id: "weekly", scope: .weeklyAll, used: 65),
-        ], provider: .claude, mode: .compact)
+        ], provider: .claude, mode: .balanced)
         XCTAssertEqual(label.text, "CL W65")
     }
 
@@ -475,7 +485,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .balanced).text,
-            "CX W52|G78")
+            "CX G78")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: windows, freshness: .fresh),
@@ -501,7 +511,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .balanced).text,
-            "CX H34|G78")
+            "CX G78")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: windows, freshness: .fresh),
@@ -527,7 +537,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .balanced).text,
-            "CX 34|52")
+            "CX W52")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: windows, freshness: .fresh),

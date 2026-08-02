@@ -171,7 +171,7 @@ public final class SettingsStore {
     }
 
     private static func decodeDocument(from object: [String: Any]) -> SettingsDocument {
-        let mode = (object["displayMode"] as? String).flatMap(DisplayMode.init(rawValue:)) ?? .full
+        let mode = DisplayMode.fromPersistedValue(object["displayMode"] as? String)
         let lineCount = (object["menuBarLineCount"] as? String)
             .flatMap(MenuBarLineCount.init(rawValue:)) ?? .one
         let rawProviders = object["providers"] as? [String: Any] ?? [:]

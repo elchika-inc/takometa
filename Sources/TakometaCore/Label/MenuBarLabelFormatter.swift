@@ -1,9 +1,25 @@
 import Foundation
 
 public enum DisplayMode: String, Sendable, CaseIterable {
-    case full
-    case balanced
-    case compact
+    case full                          // "full" ─ 意味不変
+    // 以下2つは rawValue が case 名と異なる。旧版の同名の値と意味がずれたため、
+    // 永続化層で新旧を区別できるようにする（設計書 §5.2）。
+    case balanced = "onePerProvider"   // 旧 "balanced"（モデル枠1個）とは別物
+    case compact = "icon"              // 旧 "compact"（最逼迫1枠）とは別物
+
+    /// 永続化された文字列からモードを復元する。
+    /// 旧版の値（"compact" = 最逼迫1枠 / "balanced" = モデル枠1個）は
+    /// 新しい体系へ1段繰り上げて解釈する（設計書 §5.2 の表）。
+    public static func fromPersistedValue(_ raw: String?) -> DisplayMode {
+        switch raw {
+        case DisplayMode.full.rawValue: return .full
+        case DisplayMode.balanced.rawValue: return .balanced
+        case DisplayMode.compact.rawValue: return .compact
+        case "compact": return .balanced   // 旧版
+        case "balanced": return .full      // 旧版（設計書 §5.4）
+        default: return .full
+        }
+    }
 }
 
 public struct ProviderDisplayFilter: Sendable, Equatable {
@@ -247,6 +263,63 @@ public enum MenuBarLabelFormatter {
         return MenuBarColumns(groups: groups)
     }
 
+    public static func formatCombinedIcons(
+        codex: (windows: [RateLimitWindow], freshness: Freshness)?,
+        claude: (windows: [RateLimitWindow], freshness: Freshness)?,
+        filter: DisplayFilter,
+        now: Date,
+        order: [ProviderID] = [.codex, .claude],
+        labels: [ProviderID: String] = [:]
+    ) -> MenuBarIcons {
+        // アイコンは1プロバイダ1個のため枠種別の並び順は影響しない。kindOrders は空で渡す。
+        let resolved = resolveProviders(
+            codex: codex, claude: claude, filter: filter,
+            order: order, labels: labels, kindOrders: [:])
+        return MenuBarIcons(icons: resolved.map { icon(for: $0, now: now) })
+    }
+
+    private static func icon(for item: ResolvedProvider, now: Date) -> MenuBarIcon {
+        let prefix = resolvedPrefixTitle(provider: item.provider, custom: item.label)
+
+        if item.freshness == .authenticationRequired {
+            return MenuBarIcon(
+                glyph: .authenticationRequired, style: .normal, isStale: false,
+                accessibilityText: "\(prefix) 要認証")
+        }
+
+        guard item.freshness != .unavailable,
+              let window = item.windows.sorted(by: rankedBefore).first
+        else {
+            return MenuBarIcon(
+                glyph: .unavailable, style: .normal, isStale: false,
+                accessibilityText: "\(prefix) 取得できません")
+        }
+
+        let isStale = item.freshness == .stale
+        return MenuBarIcon(
+            glyph: .gauge(GaugeLevel.forUsedPercent(window.usedPercent)),
+            style: style(for: window, freshness: item.freshness, now: now),
+            isStale: isStale,
+            accessibilityText: "\(prefix) \(scopeName(for: window.scope)) "
+                + safePercentText(window.usedPercent)
+                + (isStale ? "（更新が古い）" : ""))
+    }
+
+    private static func safePercentText(_ usedPercent: Double) -> String {
+        guard let percent = Int(exactly: usedPercent.rounded(.down)) else { return "値不明" }
+        return "\(percent)%"
+    }
+
+    /// アクセシビリティ用の枠名。表記は既存 UI（`SettingsView.windowKindOrderLabel`）に揃える。
+    private static func scopeName(for scope: RateLimitScope) -> String {
+        switch scope {
+        case .session: return "5時間枠"
+        case .weeklyAll: return "週間枠"
+        case .model(_, let displayName): return displayName
+        case .other(let raw): return raw
+        }
+    }
+
     private static func columnGroup(
         provider: ProviderID,
         windows: [RateLimitWindow],
@@ -388,7 +461,7 @@ public enum MenuBarLabelFormatter {
         }.sorted(by: rankedBefore)
 
         switch mode {
-        case .full, .balanced:
+        case .full:
             let bothBasics = session != nil && weekly != nil
             var selected: [SelectedWindow] = []
             if let session {
@@ -401,32 +474,45 @@ public enum MenuBarLabelFormatter {
                     window: weekly, fixedPrefix: bothBasics ? "" : "W",
                     abbreviationSource: nil))
             }
-            let limit = mode == .full ? 2 : 1
+            let limit = 2
             selected.append(contentsOf: nonBasic.prefix(limit).map {
                 SelectedWindow(
                     window: $0, fixedPrefix: nil,
                     abbreviationSource: abbreviationSource(for: $0.scope))
             })
-            let overflow = mode == .full ? max(0, nonBasic.count - limit) : 0
-            return (selected, overflow)
+            return (selected, max(0, nonBasic.count - limit))
 
-        case .compact:
+        case .balanced:
             guard let window = windows.sorted(by: rankedBefore).first else { return ([], 0) }
             switch window.scope {
             case .session:
-                return ([SelectedWindow(window: window, fixedPrefix: "H", abbreviationSource: nil)], 0)
+                return ([SelectedWindow(
+                    window: window, fixedPrefix: "H", abbreviationSource: nil)], 0)
             case .weeklyAll:
-                return ([SelectedWindow(window: window, fixedPrefix: "W", abbreviationSource: nil)], 0)
+                return ([SelectedWindow(
+                    window: window, fixedPrefix: "W", abbreviationSource: nil)], 0)
             case .model, .other:
                 return ([SelectedWindow(
                     window: window, fixedPrefix: nil,
                     abbreviationSource: abbreviationSource(for: window.scope))], 0)
             }
+
+        case .compact:
+            // アイコン表示は select を通らない（formatCombinedIcons が直接ウィンドウを選ぶ）。
+            // テキスト経路が .compact で呼ばれた場合は最も近い balanced として描画し、
+            // 表示が空になるのを避ける。
+            return select(windows: windows, mode: .balanced)
         }
     }
 
     private static func rankedBefore(_ lhs: RateLimitWindow, _ rhs: RateLimitWindow) -> Bool {
-        if lhs.usedPercent != rhs.usedPercent { return lhs.usedPercent > rhs.usedPercent }
+        switch (lhs.usedPercent.isFinite, rhs.usedPercent.isFinite) {
+        case (false, true): return true
+        case (true, false): return false
+        case (true, true) where lhs.usedPercent != rhs.usedPercent:
+            return lhs.usedPercent > rhs.usedPercent
+        default: break
+        }
         switch (lhs.resetsAt, rhs.resetsAt) {
         case let (left?, right?) where left != right: return left < right
         case (nil, _?): return false

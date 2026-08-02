@@ -4,6 +4,61 @@ import XCTest
 
 @MainActor
 final class SettingsMigrationTests: XCTestCase {
+    func testLegacyDisplayModeStringsMigrateOneStepUp() {
+        XCTAssertEqual(DisplayMode.fromPersistedValue("compact"), .balanced)
+        XCTAssertEqual(DisplayMode.fromPersistedValue("balanced"), .full)
+        XCTAssertEqual(DisplayMode.fromPersistedValue("full"), .full)
+    }
+
+    func testNewDisplayModeStringsRoundTrip() {
+        XCTAssertEqual(DisplayMode.fromPersistedValue("onePerProvider"), .balanced)
+        XCTAssertEqual(DisplayMode.fromPersistedValue("icon"), .compact)
+    }
+
+    func testUnknownAndMissingDisplayModeFallBackToFull() {
+        XCTAssertEqual(DisplayMode.fromPersistedValue("unknown"), .full)
+        XCTAssertEqual(DisplayMode.fromPersistedValue(nil), .full)
+    }
+
+    func testDisplayModeMigrationIsIdempotent() {
+        for legacy in ["compact", "balanced", "full"] {
+            let once = DisplayMode.fromPersistedValue(legacy)
+            let twice = DisplayMode.fromPersistedValue(once.rawValue)
+            XCTAssertEqual(once, twice, "\(legacy) の移行が冪等でない")
+        }
+    }
+
+    func testMigrateFromUserDefaultsReadsSavesAndReloadsAllDisplayModeStrings() throws {
+        let cases: [(String?, DisplayMode)] = [
+            ("compact", .balanced),
+            ("balanced", .full),
+            ("full", .full),
+            ("onePerProvider", .balanced),
+            ("icon", .compact),
+            ("future", .full),
+            (nil, .full),
+        ]
+
+        for (rawValue, expected) in cases {
+            let (defaults, suiteName) = try makeDefaults()
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let directory = temporaryDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            if let rawValue {
+                defaults.set(rawValue, forKey: NotificationSettingsLoader.displayModeKey)
+            }
+
+            let store = SettingsStore(directory: directory, defaults: defaults)
+
+            XCTAssertEqual(store.displayMode, expected, "永続化値: \(rawValue ?? "欠落")")
+            let saved = try jsonObject(in: directory)
+            XCTAssertEqual(saved["displayMode"] as? String, expected.rawValue)
+            XCTAssertEqual(
+                SettingsStore(directory: directory, defaults: defaults).displayMode, expected,
+                "再読込でモードが移動した: \(rawValue ?? "欠落")")
+        }
+    }
+
     func testMigrateBuildsDocumentFromAllSixteenKeysAndDisplayMode() throws {
         let (defaults, suiteName) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -152,7 +207,7 @@ final class SettingsMigrationTests: XCTestCase {
 
         let loaded = SettingsStore(directory: existingDirectory, defaults: defaults)
 
-        XCTAssertEqual(loaded.displayMode, .compact)
+        XCTAssertEqual(loaded.displayMode, .balanced)
         XCTAssertEqual(loaded.providerOrder, ["claude", "codex"])
         XCTAssertEqual(loaded.providers["codex"], ProviderSettings())
         XCTAssertEqual(loaded.providers["claude"], ProviderSettings(

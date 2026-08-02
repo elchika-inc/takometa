@@ -20,6 +20,7 @@ let package = Package(
                 .copy("../../scripts/release-checks/codename-identifiers.txt"),
             ]
         ),
+        .testTarget(name: "TakometaAppTests", dependencies: ["TakometaApp", "TakometaCore"]),
         .testTarget(
             name: "TakometaFixtureSupportTests",
             dependencies: ["TakometaFixtureSupport"],

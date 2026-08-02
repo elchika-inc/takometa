@@ -37,6 +37,38 @@ final class SettingsStoreTests: XCTestCase {
         }
     }
 
+    func testJSONReadsAllLegacyAndNewDisplayModeStringsAndPersistsCanonicalValue() throws {
+        let cases: [(String?, DisplayMode)] = [
+            ("compact", .balanced),
+            ("balanced", .full),
+            ("full", .full),
+            ("onePerProvider", .balanced),
+            ("icon", .compact),
+            ("future", .full),
+            (nil, .full),
+        ]
+
+        for (rawValue, expected) in cases {
+            try withTemporaryDirectory { directory in
+                let displayModeField = rawValue.map { "\"displayMode\":\"\($0)\"," } ?? ""
+                try writeJSON("""
+                {"version":1,\(displayModeField)"providerOrder":["codex","claude"],"providers":{}}
+                """, in: directory)
+
+                let store = try makeStore(directory: directory)
+                XCTAssertEqual(store.displayMode, expected, "永続化値: \(rawValue ?? "欠落")")
+
+                // 任意の保存を契機に旧値・未知値も新しい正規値へ置き換える。
+                store.update(provider: "codex") { $0.usageThreshold = 80 }
+                let saved = try jsonObject(in: directory)
+                XCTAssertEqual(saved["displayMode"] as? String, expected.rawValue)
+
+                let reloaded = try makeStore(directory: directory)
+                XCTAssertEqual(reloaded.displayMode, expected)
+            }
+        }
+    }
+
     func testLabelRoundTrips() throws {
         try withTemporaryDirectory { directory in
             let store = try makeStore(directory: directory)
@@ -169,7 +201,7 @@ final class SettingsStoreTests: XCTestCase {
 
             let store = try makeStore(directory: directory)
 
-            XCTAssertEqual(store.displayMode, .compact)
+            XCTAssertEqual(store.displayMode, .balanced)
             XCTAssertEqual(store.providers["claude"]?.show, false)
             XCTAssertEqual(store.providers["claude"]?.usageThreshold, 61)
             XCTAssertEqual(store.providers["codex"], ProviderSettings())
@@ -196,7 +228,7 @@ final class SettingsStoreTests: XCTestCase {
             try writeData(original, in: directory)
 
             let store = try makeStore(directory: directory)
-            XCTAssertEqual(store.displayMode, .balanced)
+            XCTAssertEqual(store.displayMode, .full)
             XCTAssertEqual(store.providers["codex"]?.show, false)
             XCTAssertNotNil(store.lastErrorDescription)
             XCTAssertEqual(try settingsData(in: directory), original)
@@ -329,7 +361,7 @@ final class SettingsStoreTests: XCTestCase {
                 store.updateDisplayMode(.balanced)
 
                 let saved = try jsonObject(in: directory)
-                XCTAssertEqual(saved["displayMode"] as? String, "balanced")
+                XCTAssertEqual(saved["displayMode"] as? String, "onePerProvider")
                 XCTAssertEqual(saved["rootUnknown"] as? String, "keep")
                 let providers = try XCTUnwrap(saved["providers"] as? [String: Any])
                 XCTAssertEqual((providers["codex"] as? [String: Any])?["show"] as? Bool, false)
@@ -346,7 +378,7 @@ final class SettingsStoreTests: XCTestCase {
 
             let store = try makeStore(directory: directory)
             XCTAssertNil(store.lastErrorDescription)
-            XCTAssertEqual(store.displayMode, .compact)
+            XCTAssertEqual(store.displayMode, .balanced)
             XCTAssertEqual(store.providers["codex"]?.show, false)
 
             store.update(provider: "codex") { $0.show = true }
