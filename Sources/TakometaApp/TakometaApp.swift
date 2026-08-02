@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import TakometaCore
 
@@ -92,6 +93,12 @@ struct TakometaApp: App {
     }
 }
 
+@MainActor
+func presentFloatingPanel(activate: () -> Void, open: () -> Void) {
+    activate()
+    open()
+}
+
 /// 設定を正本として窓の開閉を追従させる。openWindow / dismissWindow は
 /// View の Environment からしか取れないため、label 側へ寄せている。
 private struct FloatingPanelPresenter: ViewModifier {
@@ -104,14 +111,20 @@ private struct FloatingPanelPresenter: ViewModifier {
     func body(content: Content) -> some View {
         content
             .task {
-                if isPresented { openWindow(id: windowID) }
+                if isPresented { showPanel() }
             }
             .onChange(of: isPresented, initial: false) { _, shows in
                 if shows {
-                    openWindow(id: windowID)
+                    showPanel()
                 } else {
                     dismissWindow(id: windowID)
                 }
             }
+    }
+
+    private func showPanel() {
+        presentFloatingPanel(
+            activate: { NSApp.activate(ignoringOtherApps: true) },
+            open: { openWindow(id: windowID) })
     }
 }
