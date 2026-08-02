@@ -83,6 +83,9 @@ struct TakometaApp: App {
 
         Window("Takometa", id: Self.panelWindowID) {
             ProviderPopoverView(store: store, settingsStore: settingsStore)
+                .onDisappear {
+                    settingsStore.updateShowsFloatingPanel(false)
+                }
         }
         .windowLevel(.floating)
         .windowResizability(.contentSize)
@@ -99,12 +102,16 @@ private struct FloatingPanelPresenter: ViewModifier {
     @Environment(\.dismissWindow) private var dismissWindow
 
     func body(content: Content) -> some View {
-        content.onChange(of: isPresented, initial: false) { _, shows in
-            if shows {
-                openWindow(id: windowID)
-            } else {
-                dismissWindow(id: windowID)
+        content
+            .task {
+                if isPresented { openWindow(id: windowID) }
             }
-        }
+            .onChange(of: isPresented, initial: false) { _, shows in
+                if shows {
+                    openWindow(id: windowID)
+                } else {
+                    dismissWindow(id: windowID)
+                }
+            }
     }
 }
