@@ -17,3 +17,44 @@ public enum GaugeLevel: Sendable, Equatable, CaseIterable {
         }
     }
 }
+
+/// アイコンが何を描くか。値がないケースを `GaugeLevel` から分離することで、
+/// 「値が取得できないときに 0% を表示しない」原則を型で守る。
+public enum MenuBarIconGlyph: Sendable, Equatable {
+    case gauge(GaugeLevel)
+    case unavailable
+    case authenticationRequired
+}
+
+public struct MenuBarIcon: Sendable, Equatable {
+    public let glyph: MenuBarIconGlyph
+    public let style: SegmentStyle
+    public let isStale: Bool
+    public let accessibilityText: String
+
+    public init(
+        glyph: MenuBarIconGlyph,
+        style: SegmentStyle,
+        isStale: Bool,
+        accessibilityText: String
+    ) {
+        self.glyph = glyph
+        self.style = style
+        self.isStale = isStale
+        self.accessibilityText = accessibilityText
+    }
+}
+
+public struct MenuBarIcons: Sendable, Equatable {
+    public let icons: [MenuBarIcon]
+
+    public init(icons: [MenuBarIcon]) {
+        self.icons = icons
+    }
+
+    /// VoiceOver 用。プロバイダの区切りは半角スペース2つ。
+    /// 区切り幅は `MenuBarColumns.accessibilityText` のグループ区切りに揃える。
+    public var accessibilityText: String {
+        icons.map(\.accessibilityText).joined(separator: "  ")
+    }
+}

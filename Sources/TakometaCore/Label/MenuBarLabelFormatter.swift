@@ -263,6 +263,58 @@ public enum MenuBarLabelFormatter {
         return MenuBarColumns(groups: groups)
     }
 
+    public static func formatCombinedIcons(
+        codex: (windows: [RateLimitWindow], freshness: Freshness)?,
+        claude: (windows: [RateLimitWindow], freshness: Freshness)?,
+        filter: DisplayFilter,
+        now: Date,
+        order: [ProviderID] = [.codex, .claude],
+        labels: [ProviderID: String] = [:]
+    ) -> MenuBarIcons {
+        // アイコンは1プロバイダ1個のため枠種別の並び順は影響しない。kindOrders は空で渡す。
+        let resolved = resolveProviders(
+            codex: codex, claude: claude, filter: filter,
+            order: order, labels: labels, kindOrders: [:])
+        return MenuBarIcons(icons: resolved.map { icon(for: $0, now: now) })
+    }
+
+    private static func icon(for item: ResolvedProvider, now: Date) -> MenuBarIcon {
+        let prefix = resolvedPrefixTitle(provider: item.provider, custom: item.label)
+
+        if item.freshness == .authenticationRequired {
+            return MenuBarIcon(
+                glyph: .authenticationRequired, style: .normal, isStale: false,
+                accessibilityText: "\(prefix) 要認証")
+        }
+
+        guard item.freshness != .unavailable,
+              let window = item.windows.sorted(by: rankedBefore).first
+        else {
+            return MenuBarIcon(
+                glyph: .unavailable, style: .normal, isStale: false,
+                accessibilityText: "\(prefix) 取得できません")
+        }
+
+        let isStale = item.freshness == .stale
+        let percent = Int(window.usedPercent.rounded(.down))
+        return MenuBarIcon(
+            glyph: .gauge(GaugeLevel.forUsedPercent(window.usedPercent)),
+            style: style(for: window, freshness: item.freshness, now: now),
+            isStale: isStale,
+            accessibilityText: "\(prefix) \(scopeName(for: window.scope)) \(percent)%"
+                + (isStale ? "（更新が古い）" : ""))
+    }
+
+    /// アクセシビリティ用の枠名。表記は既存 UI（`SettingsView.windowKindOrderLabel`）に揃える。
+    private static func scopeName(for scope: RateLimitScope) -> String {
+        switch scope {
+        case .session: return "5時間枠"
+        case .weeklyAll: return "週間枠"
+        case .model(_, let displayName): return displayName
+        case .other(let raw): return raw
+        }
+    }
+
     private static func columnGroup(
         provider: ProviderID,
         windows: [RateLimitWindow],
