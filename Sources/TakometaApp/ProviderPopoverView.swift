@@ -177,6 +177,9 @@ private struct ProviderSectionView: View {
                     recent: recent,
                     now: now) {
                     Text(text)
+                        // 改行だけでは1行目が長い環境で切り詰められる。
+                        // 縦に伸びることを許可して折り返しでも守る（#9）
+                        .fixedSize(horizontal: false, vertical: true)
                         .foregroundStyle(
                             PaceText.requiresAttention(pace, recent: recent)
                                 ? Color.orange : Color.secondary)
