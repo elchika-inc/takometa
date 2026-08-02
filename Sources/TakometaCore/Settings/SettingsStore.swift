@@ -185,7 +185,7 @@ public final class SettingsStore {
         let mode = DisplayMode.fromPersistedValue(object["displayMode"] as? String)
         let lineCount = (object["menuBarLineCount"] as? String)
             .flatMap(MenuBarLineCount.init(rawValue:)) ?? .one
-        let showsPanel = object["showsFloatingPanel"] as? Bool ?? false
+        let showsPanel = bool(from: object["showsFloatingPanel"]) ?? false
         let rawProviders = object["providers"] as? [String: Any] ?? [:]
         var decodedProviders: [String: ProviderSettings] = [:]
 

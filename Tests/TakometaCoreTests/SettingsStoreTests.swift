@@ -42,6 +42,18 @@ final class SettingsStoreTests: XCTestCase {
         }
     }
 
+    func testShowsFloatingPanelIgnoresNumericValue() throws {
+        try withTemporaryDirectory { directory in
+            try writeJSON("""
+            {"version":1,"displayMode":"full","showsFloatingPanel":1,
+             "providerOrder":["codex","claude"],"providers":{}}
+            """, in: directory)
+
+            let store = try makeStore(directory: directory)
+            XCTAssertFalse(store.showsFloatingPanel)
+        }
+    }
+
     func testAbsentFileCreatesDefaultDocument() throws {
         try withTemporaryDirectory { directory in
             let store = try makeStore(directory: directory)
