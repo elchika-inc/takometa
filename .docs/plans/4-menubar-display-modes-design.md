@@ -292,7 +292,9 @@ if settingsStore.displayMode == .compact {
 | `Tests/TakometaCoreTests/MenuBarIconsTests.swift` | 新規 |
 | `Tests/TakometaCoreTests/MenuBarLabelFormatterTests.swift` | モード付け替え |
 | `Tests/TakometaCoreTests/MenuBarColumnsFormatterTests.swift` | 1件追加 |
-| `Tests/TakometaCoreTests/SettingsMigrationTests.swift` | 移行テスト追加 |
+| `Tests/TakometaCoreTests/SettingsMigrationTests.swift` | 写像の単体テストと UserDefaults 経路のテスト追加 |
+| `Tests/TakometaCoreTests/SettingsStoreTests.swift` | JSON 経路の移行テスト追加 |
+| `CHANGELOG.md` | `[Unreleased]` に利用者向けの変更を追記 |
 
 ## 9. リスクと退路
 
