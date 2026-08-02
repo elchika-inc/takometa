@@ -170,6 +170,21 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
         XCTAssertEqual(result.groups[0].count, 2)
     }
 
+    func testBalancedKeepsSingleWindowColumnPerProvider() {
+        let result = columns(
+            codex: ([
+                window(id: "s", scope: .session, used: 34, kind: .session),
+                window(id: "w", scope: .weeklyAll, used: 65),
+            ], .fresh),
+            filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)),
+            mode: .balanced)
+
+        // プロバイダラベル列 + 値列1つ。full なら値列が2つ以上になる
+        XCTAssertEqual(result.groups.count, 1)
+        XCTAssertEqual(result.groups[0].count, 2)
+        XCTAssertEqual(result.groups[0][1].value, "65")
+    }
+
     func testWindowKindFilterIsApplied() {
         // N-8 の回帰: 枠種別の表示 ON/OFF（DisplayFilter）が2行でも効く。
         // testHiddenProviderIsExcluded は show: false（プロバイダー丸ごと）で別物

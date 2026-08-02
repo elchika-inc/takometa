@@ -404,7 +404,7 @@ public enum MenuBarLabelFormatter {
         }.sorted(by: rankedBefore)
 
         switch mode {
-        case .full, .balanced:
+        case .full:
             let bothBasics = session != nil && weekly != nil
             var selected: [SelectedWindow] = []
             if let session {
@@ -417,27 +417,34 @@ public enum MenuBarLabelFormatter {
                     window: weekly, fixedPrefix: bothBasics ? "" : "W",
                     abbreviationSource: nil))
             }
-            let limit = mode == .full ? 2 : 1
+            let limit = 2
             selected.append(contentsOf: nonBasic.prefix(limit).map {
                 SelectedWindow(
                     window: $0, fixedPrefix: nil,
                     abbreviationSource: abbreviationSource(for: $0.scope))
             })
-            let overflow = mode == .full ? max(0, nonBasic.count - limit) : 0
-            return (selected, overflow)
+            return (selected, max(0, nonBasic.count - limit))
 
-        case .compact:
+        case .balanced:
             guard let window = windows.sorted(by: rankedBefore).first else { return ([], 0) }
             switch window.scope {
             case .session:
-                return ([SelectedWindow(window: window, fixedPrefix: "H", abbreviationSource: nil)], 0)
+                return ([SelectedWindow(
+                    window: window, fixedPrefix: "H", abbreviationSource: nil)], 0)
             case .weeklyAll:
-                return ([SelectedWindow(window: window, fixedPrefix: "W", abbreviationSource: nil)], 0)
+                return ([SelectedWindow(
+                    window: window, fixedPrefix: "W", abbreviationSource: nil)], 0)
             case .model, .other:
                 return ([SelectedWindow(
                     window: window, fixedPrefix: nil,
                     abbreviationSource: abbreviationSource(for: window.scope))], 0)
             }
+
+        case .compact:
+            // アイコン表示は select を通らない（formatCombinedIcons が直接ウィンドウを選ぶ）。
+            // テキスト経路が .compact で呼ばれた場合は最も近い balanced として描画し、
+            // 表示が空になるのを避ける。
+            return select(windows: windows, mode: .balanced)
         }
     }
 
