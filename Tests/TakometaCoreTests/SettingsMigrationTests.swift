@@ -28,9 +28,7 @@ final class SettingsMigrationTests: XCTestCase {
         }
     }
 
-    func testMigrateFromUserDefaultsReadsAllLegacyAndNewDisplayModeStrings() throws {
-        let (defaults, suiteName) = try makeDefaults()
-        defer { defaults.removePersistentDomain(forName: suiteName) }
+    func testMigrateFromUserDefaultsReadsSavesAndReloadsAllDisplayModeStrings() throws {
         let cases: [(String?, DisplayMode)] = [
             ("compact", .balanced),
             ("balanced", .full),
@@ -42,17 +40,21 @@ final class SettingsMigrationTests: XCTestCase {
         ]
 
         for (rawValue, expected) in cases {
+            let (defaults, suiteName) = try makeDefaults()
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let directory = temporaryDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
             if let rawValue {
                 defaults.set(rawValue, forKey: NotificationSettingsLoader.displayModeKey)
-            } else {
-                defaults.removeObject(forKey: NotificationSettingsLoader.displayModeKey)
             }
 
-            let document = NotificationSettingsLoader.migrate(from: defaults)
+            let store = SettingsStore(directory: directory, defaults: defaults)
 
-            XCTAssertEqual(document.displayMode, expected, "永続化値: \(rawValue ?? "欠落")")
+            XCTAssertEqual(store.displayMode, expected, "永続化値: \(rawValue ?? "欠落")")
+            let saved = try jsonObject(in: directory)
+            XCTAssertEqual(saved["displayMode"] as? String, expected.rawValue)
             XCTAssertEqual(
-                DisplayMode.fromPersistedValue(document.displayMode.rawValue), expected,
+                SettingsStore(directory: directory, defaults: defaults).displayMode, expected,
                 "再読込でモードが移動した: \(rawValue ?? "欠落")")
         }
     }

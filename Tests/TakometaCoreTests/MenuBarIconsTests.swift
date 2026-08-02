@@ -101,6 +101,16 @@ final class MenuBarIconsTests: XCTestCase {
             accessibilityText: "CX 要認証")])
     }
 
+    func testAuthenticationRequiredIgnoresCachedWindows() {
+        let result = icons(
+            codex: ([window(id: "w", scope: .weeklyAll, used: 50)], .authenticationRequired),
+            filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
+
+        XCTAssertEqual(result.icons, [MenuBarIcon(
+            glyph: .authenticationRequired, style: .normal, isStale: false,
+            accessibilityText: "CX 要認証")])
+    }
+
     func testStaleIsMarkedWithoutChangingGlyph() {
         let result = icons(
             codex: ([window(id: "w", scope: .weeklyAll, used: 50)], .stale),
@@ -141,25 +151,29 @@ final class MenuBarIconsTests: XCTestCase {
     }
 
     func testWindowKindFiltersAreAppliedBeforeMostConstrainedSelection() {
-        let windows = [
-            window(id: "s", scope: .session, used: 95, kind: .session),
-            window(id: "w", scope: .weeklyAll, used: 85),
-            window(id: "m", scope: .model(id: "model", displayName: "Model"), used: 75),
-        ]
-        let cases: [(ProviderDisplayFilter, MenuBarIconGlyph)] = [
-            (.init(showSession: false), .gauge(.max)),
-            (.init(showSession: false, showWeekly: false), .gauge(.high)),
-            (.init(showSession: false, showModel: false), .gauge(.max)),
+        let cases: [([RateLimitWindow], ProviderDisplayFilter, String)] = [
+            ([
+                window(id: "s", scope: .session, used: 95, kind: .session),
+                window(id: "w", scope: .weeklyAll, used: 85),
+            ], .init(showSession: false), "CX 週間枠 85%"),
+            ([
+                window(id: "w", scope: .weeklyAll, used: 95),
+                window(id: "m", scope: .model(id: "model", displayName: "Model"), used: 75),
+            ], .init(showWeekly: false), "CX Model 75%"),
+            ([
+                window(id: "m", scope: .model(id: "model", displayName: "Model"), used: 95),
+                window(id: "s", scope: .session, used: 75, kind: .session),
+            ], .init(showModel: false), "CX 5時間枠 75%"),
         ]
 
-        for (providerFilter, expectedGlyph) in cases {
+        for (windows, providerFilter, expectedText) in cases {
             let result = icons(
                 codex: (windows, .fresh),
                 filter: DisplayFilter(
                     codex: providerFilter,
                     claude: ProviderDisplayFilter(show: false)))
 
-            XCTAssertEqual(result.icons[0].glyph, expectedGlyph)
+            XCTAssertEqual(result.icons[0].accessibilityText, expectedText)
         }
     }
 
@@ -192,5 +206,27 @@ final class MenuBarIconsTests: XCTestCase {
             XCTAssertEqual(result.icons[0].glyph, .gauge(.max))
             XCTAssertEqual(result.icons[0].accessibilityText, "CX 週間枠 値不明")
         }
+    }
+
+    func testNonFinitePercentWinsSelectionAgainstFiniteWindow() {
+        for used in [Double.nan, Double.infinity, -Double.infinity] {
+            let result = icons(
+                codex: ([
+                    window(id: "finite", scope: .session, used: 99, kind: .session),
+                    window(id: "invalid", scope: .weeklyAll, used: used),
+                ], .fresh),
+                filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
+
+            XCTAssertEqual(result.icons[0].glyph, .gauge(.max))
+            XCTAssertEqual(result.icons[0].accessibilityText, "CX 週間枠 値不明")
+        }
+    }
+
+    func testAccessibilityPercentIsTruncated() {
+        let result = icons(
+            codex: ([window(id: "w", scope: .weeklyAll, used: 49.9)], .fresh),
+            filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
+
+        XCTAssertEqual(result.icons[0].accessibilityText, "CX 週間枠 49%")
     }
 }

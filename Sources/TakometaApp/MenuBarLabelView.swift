@@ -97,7 +97,7 @@ struct MenuBarLabelView: View {
     ) -> (windows: [RateLimitWindow], freshness: Freshness)? {
         let override = provider == .codex ? codexStateOverride : claudeStateOverride
         let state = override ?? store.states[provider] ?? UsageStore.ProviderState()
-        return (state.snapshot?.windows ?? [], state.freshness)
+        return menuBarInput(from: state)
     }
 
     @MainActor
@@ -106,6 +106,12 @@ struct MenuBarLabelView: View {
         renderer.scale = displayScale
         return renderer.nsImage ?? NSImage(size: NSSize(width: 1, height: 1))
     }
+}
+
+func menuBarInput(
+    from state: UsageStore.ProviderState
+) -> (windows: [RateLimitWindow], freshness: Freshness) {
+    (state.snapshot?.windows ?? [], state.freshness)
 }
 
 private struct EmptyMenuBarLabelView: View {

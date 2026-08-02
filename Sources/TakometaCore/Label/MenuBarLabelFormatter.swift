@@ -506,7 +506,13 @@ public enum MenuBarLabelFormatter {
     }
 
     private static func rankedBefore(_ lhs: RateLimitWindow, _ rhs: RateLimitWindow) -> Bool {
-        if lhs.usedPercent != rhs.usedPercent { return lhs.usedPercent > rhs.usedPercent }
+        switch (lhs.usedPercent.isFinite, rhs.usedPercent.isFinite) {
+        case (false, true): return true
+        case (true, false): return false
+        case (true, true) where lhs.usedPercent != rhs.usedPercent:
+            return lhs.usedPercent > rhs.usedPercent
+        default: break
+        }
         switch (lhs.resetsAt, rhs.resetsAt) {
         case let (left?, right?) where left != right: return left < right
         case (nil, _?): return false
