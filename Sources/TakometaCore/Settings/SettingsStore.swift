@@ -5,6 +5,7 @@ import Observation
 public final class SettingsStore {
     public private(set) var displayMode: DisplayMode
     public private(set) var menuBarLineCount: MenuBarLineCount
+    public private(set) var showsFloatingPanel: Bool
     public private(set) var providerOrder: [String]
     public private(set) var providers: [String: ProviderSettings]
     public private(set) var lastErrorDescription: String?
@@ -26,6 +27,7 @@ public final class SettingsStore {
         )[0].appendingPathComponent("Takometa", isDirectory: true)
         displayMode = .full
         menuBarLineCount = .one
+        showsFloatingPanel = false
         providerOrder = Self.knownProviderIDs
         providers = Self.defaultProviders()
         lastErrorDescription = nil
@@ -39,6 +41,7 @@ public final class SettingsStore {
                 displayMode: displayMode,
                 providerOrder: providerOrder,
                 menuBarLineCount: menuBarLineCount,
+                showsFloatingPanel: showsFloatingPanel,
                 providers: providers)
             save()
             return
@@ -93,6 +96,11 @@ public final class SettingsStore {
         save()
     }
 
+    public func updateShowsFloatingPanel(_ shows: Bool) {
+        showsFloatingPanel = shows
+        save()
+    }
+
     public func updateProviderOrder(_ newOrder: [String]) {
         providerOrder = Self.normalizeProviderOrder(
             newOrder,
@@ -115,6 +123,7 @@ public final class SettingsStore {
     private func apply(_ document: SettingsDocument) {
         displayMode = document.displayMode
         menuBarLineCount = document.menuBarLineCount
+        showsFloatingPanel = document.showsFloatingPanel
         providers = document.providers
         providerOrder = document.providerOrder
     }
@@ -125,6 +134,7 @@ public final class SettingsStore {
             displayMode: displayMode,
             providerOrder: providerOrder,
             menuBarLineCount: menuBarLineCount,
+            showsFloatingPanel: showsFloatingPanel,
             providers: providers)
         isReadOnly = false
         save()
@@ -142,6 +152,7 @@ public final class SettingsStore {
         object["version"] = 1
         object["displayMode"] = displayMode.rawValue
         object["menuBarLineCount"] = menuBarLineCount.rawValue
+        object["showsFloatingPanel"] = showsFloatingPanel
         object["providerOrder"] = providerOrder
 
         var rawProviders = object["providers"] as? [String: Any] ?? [:]
@@ -174,6 +185,7 @@ public final class SettingsStore {
         let mode = DisplayMode.fromPersistedValue(object["displayMode"] as? String)
         let lineCount = (object["menuBarLineCount"] as? String)
             .flatMap(MenuBarLineCount.init(rawValue:)) ?? .one
+        let showsPanel = bool(from: object["showsFloatingPanel"]) ?? false
         let rawProviders = object["providers"] as? [String: Any] ?? [:]
         var decodedProviders: [String: ProviderSettings] = [:]
 
@@ -201,6 +213,7 @@ public final class SettingsStore {
                 rawOrder,
                 providerIDs: Set(decodedProviders.keys)),
             menuBarLineCount: lineCount,
+            showsFloatingPanel: showsPanel,
             providers: decodedProviders)
     }
 
@@ -260,6 +273,7 @@ public final class SettingsStore {
         displayMode: DisplayMode,
         providerOrder: [String],
         menuBarLineCount: MenuBarLineCount,
+        showsFloatingPanel: Bool,
         providers: [String: ProviderSettings]
     ) -> [String: Any] {
         var rawProviders: [String: Any] = [:]
@@ -273,6 +287,7 @@ public final class SettingsStore {
             "displayMode": displayMode.rawValue,
             "providerOrder": providerOrder,
             "menuBarLineCount": menuBarLineCount.rawValue,
+            "showsFloatingPanel": showsFloatingPanel,
             "providers": rawProviders,
         ]
     }

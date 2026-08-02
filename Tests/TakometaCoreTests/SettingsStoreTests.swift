@@ -4,6 +4,56 @@ import XCTest
 
 @MainActor
 final class SettingsStoreTests: XCTestCase {
+    func testShowsFloatingPanelDefaultsToFalseWhenKeyIsAbsent() throws {
+        try withTemporaryDirectory { directory in
+            try writeJSON("""
+            {"version":1,"displayMode":"full","providerOrder":["codex","claude"],"providers":{}}
+            """, in: directory)
+
+            let store = try makeStore(directory: directory)
+            XCTAssertFalse(store.showsFloatingPanel)
+        }
+    }
+
+    func testShowsFloatingPanelRoundTrips() throws {
+        try withTemporaryDirectory { directory in
+            let store = try makeStore(directory: directory)
+            XCTAssertFalse(store.showsFloatingPanel)
+
+            store.updateShowsFloatingPanel(true)
+
+            let saved = try jsonObject(in: directory)
+            XCTAssertEqual(saved["showsFloatingPanel"] as? Bool, true)
+
+            let reloaded = try makeStore(directory: directory)
+            XCTAssertTrue(reloaded.showsFloatingPanel)
+        }
+    }
+
+    func testShowsFloatingPanelIgnoresNonBooleanValue() throws {
+        try withTemporaryDirectory { directory in
+            try writeJSON("""
+            {"version":1,"displayMode":"full","showsFloatingPanel":"yes",
+             "providerOrder":["codex","claude"],"providers":{}}
+            """, in: directory)
+
+            let store = try makeStore(directory: directory)
+            XCTAssertFalse(store.showsFloatingPanel)
+        }
+    }
+
+    func testShowsFloatingPanelIgnoresNumericValue() throws {
+        try withTemporaryDirectory { directory in
+            try writeJSON("""
+            {"version":1,"displayMode":"full","showsFloatingPanel":1,
+             "providerOrder":["codex","claude"],"providers":{}}
+            """, in: directory)
+
+            let store = try makeStore(directory: directory)
+            XCTAssertFalse(store.showsFloatingPanel)
+        }
+    }
+
     func testAbsentFileCreatesDefaultDocument() throws {
         try withTemporaryDirectory { directory in
             let store = try makeStore(directory: directory)

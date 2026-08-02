@@ -33,6 +33,11 @@ struct ProviderPopoverView: View {
                 .foregroundStyle(.secondary)
 
                 Spacer()
+                FloatingPanelToggleButton(
+                    isPresented: settingsStore.showsFloatingPanel
+                ) {
+                    settingsStore.updateShowsFloatingPanel(!settingsStore.showsFloatingPanel)
+                }
                 SettingsLink {
                     Label("設定", systemImage: "gearshape")
                 }
@@ -60,6 +65,19 @@ struct ProviderPopoverView: View {
 
     private func stateOverride(for provider: ProviderID) -> UsageStore.ProviderState? {
         provider == .codex ? codexStateOverride : claudeStateOverride
+    }
+}
+
+struct FloatingPanelToggleButton: View {
+    let isPresented: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(
+            isPresented ? "パネルを隠す" : "パネルを表示",
+            systemImage: "macwindow",
+            action: action)
+            .labelStyle(.iconOnly)
     }
 }
 
