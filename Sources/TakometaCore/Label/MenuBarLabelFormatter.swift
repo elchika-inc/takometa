@@ -1,9 +1,25 @@
 import Foundation
 
 public enum DisplayMode: String, Sendable, CaseIterable {
-    case full
-    case balanced
-    case compact
+    case full                          // "full" ─ 意味不変
+    // 以下2つは rawValue が case 名と異なる。旧版の同名の値と意味がずれたため、
+    // 永続化層で新旧を区別できるようにする（設計書 §5.2）。
+    case balanced = "onePerProvider"   // 旧 "balanced"（モデル枠1個）とは別物
+    case compact = "icon"              // 旧 "compact"（最逼迫1枠）とは別物
+
+    /// 永続化された文字列からモードを復元する。
+    /// 旧版の値（"compact" = 最逼迫1枠 / "balanced" = モデル枠1個）は
+    /// 新しい体系へ1段繰り上げて解釈する（設計書 §5.2 の表）。
+    public static func fromPersistedValue(_ raw: String?) -> DisplayMode {
+        switch raw {
+        case DisplayMode.full.rawValue: return .full
+        case DisplayMode.balanced.rawValue: return .balanced
+        case DisplayMode.compact.rawValue: return .compact
+        case "compact": return .balanced   // 旧版
+        case "balanced": return .full      // 旧版（設計書 §5.4）
+        default: return .full
+        }
+    }
 }
 
 public struct ProviderDisplayFilter: Sendable, Equatable {

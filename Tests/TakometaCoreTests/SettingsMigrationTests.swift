@@ -4,6 +4,40 @@ import XCTest
 
 @MainActor
 final class SettingsMigrationTests: XCTestCase {
+    func testLegacyDisplayModeStringsMigrateOneStepUp() {
+        XCTAssertEqual(DisplayMode.fromPersistedValue("compact"), .balanced)
+        XCTAssertEqual(DisplayMode.fromPersistedValue("balanced"), .full)
+        XCTAssertEqual(DisplayMode.fromPersistedValue("full"), .full)
+    }
+
+    func testNewDisplayModeStringsRoundTrip() {
+        XCTAssertEqual(DisplayMode.fromPersistedValue("onePerProvider"), .balanced)
+        XCTAssertEqual(DisplayMode.fromPersistedValue("icon"), .compact)
+    }
+
+    func testUnknownAndMissingDisplayModeFallBackToFull() {
+        XCTAssertEqual(DisplayMode.fromPersistedValue("unknown"), .full)
+        XCTAssertEqual(DisplayMode.fromPersistedValue(nil), .full)
+    }
+
+    func testDisplayModeMigrationIsIdempotent() {
+        for legacy in ["compact", "balanced", "full"] {
+            let once = DisplayMode.fromPersistedValue(legacy)
+            let twice = DisplayMode.fromPersistedValue(once.rawValue)
+            XCTAssertEqual(once, twice, "\(legacy) の移行が冪等でない")
+        }
+    }
+
+    func testMigrateFromUserDefaultsAppliesLegacyDisplayModeMapping() throws {
+        let (defaults, suiteName) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("compact", forKey: NotificationSettingsLoader.displayModeKey)
+
+        let document = NotificationSettingsLoader.migrate(from: defaults)
+
+        XCTAssertEqual(document.displayMode, .balanced)
+    }
+
     func testMigrateBuildsDocumentFromAllSixteenKeysAndDisplayMode() throws {
         let (defaults, suiteName) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -152,7 +186,7 @@ final class SettingsMigrationTests: XCTestCase {
 
         let loaded = SettingsStore(directory: existingDirectory, defaults: defaults)
 
-        XCTAssertEqual(loaded.displayMode, .compact)
+        XCTAssertEqual(loaded.displayMode, .balanced)
         XCTAssertEqual(loaded.providerOrder, ["claude", "codex"])
         XCTAssertEqual(loaded.providers["codex"], ProviderSettings())
         XCTAssertEqual(loaded.providers["claude"], ProviderSettings(
