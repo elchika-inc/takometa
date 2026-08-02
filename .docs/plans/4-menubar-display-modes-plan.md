@@ -153,14 +153,16 @@ swift test --filter SettingsMigrationTests
 
 - [ ] **Step 6: JSON 経路の移行テストを追加する**
 
-`Tests/TakometaCoreTests/SettingsStoreTests.swift` のクラス内に追加する。既存の `withTemporaryDirectory` / `makeStore` / `jsonObject(in:)` ヘルパーを使う。
+`Tests/TakometaCoreTests/SettingsStoreTests.swift` のクラス内に追加する。既存の `withTemporaryDirectory` / `writeJSON` / `makeStore` / `jsonObject(in:)` ヘルパーを使う。
+
+**fixture は必ず `writeJSON` で書くこと。** `withTemporaryDirectory`（`:513`）は URL を返すだけでディレクトリの実体を作らない。実体を作るのは `writeData`（`:540`）で、ここが `createDirectory` と `settingsURL(in:)` の両方を解決している。直接 `Data.write` すると親ディレクトリがなく `ENOENT` になり、さらにファイル名を literal で持つと正本（`SettingsStore.fileName`、`:16`）から乖離してテストが黙って別ファイルを見る。
 
 ```swift
 func testLegacyCompactInFileLoadsAsBalancedAndPersistsNewRawValue() throws {
     try withTemporaryDirectory { directory in
-        let url = directory.appendingPathComponent("provider-settings.json")
-        let legacy: [String: Any] = ["version": 1, "displayMode": "compact"]
-        try JSONSerialization.data(withJSONObject: legacy).write(to: url)
+        try writeJSON("""
+        {"version":1,"displayMode":"compact","providerOrder":["codex","claude"],"providers":{}}
+        """, in: directory)
 
         let store = try makeStore(directory: directory)
         XCTAssertEqual(store.displayMode, .balanced)
@@ -176,6 +178,11 @@ func testLegacyCompactInFileLoadsAsBalancedAndPersistsNewRawValue() throws {
     }
 }
 ```
+
+このテストが依拠している既存挙動（いずれも実測で確認済み）:
+
+- `SettingsStore.save()`（`:143`）が `object["displayMode"] = displayMode.rawValue` を無条件に書くため、`update(provider:)` だけで displayMode も新 rawValue へ書き換わる。`updateDisplayMode` の明示呼び出しは不要
+- `decodeDocument` は providers が空でも `knownProviderIDs` で既定値を補完するため `"providers":{}` で足りる
 
 - [ ] **Step 6.5: 既存テストの期待値を新しい意味へ追随させる**
 
