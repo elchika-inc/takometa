@@ -28,15 +28,17 @@ public enum PaceText {
         // 直近が算出できないときは平均のみ。「直近 --」のような欠測表示はしない（N-4）
         let head = recent.map { average + String(format: "・直近 %.1f%%/h", $0) } ?? average
 
+        // 実績（平均・直近）と見通しは改行で分ける。1行に連結すると幅360の
+        // ポップオーバーで末尾が切り詰められ、上限到達予測の日時が読めなくなる（#9）
         if pace.willLastToReset {
-            return "\(head)・リセットまで持つ見込み"
+            return "\(head)\nリセットまで持つ見込み"
         }
         if let projected = pace.projectedLimitAt {
             // 上限到達予測は引き続き平均から（N-7）。直近から予測すると
             // 一時的な急使用で不安定な予測が出る
             let when = RelativeDateText.text(
                 for: projected, now: now, calendar: calendar, locale: locale)
-            return "\(head)・上限到達予測 \(when)"
+            return "\(head)\n上限到達予測 \(when)"
         }
         return head
     }
