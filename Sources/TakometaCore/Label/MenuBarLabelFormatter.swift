@@ -296,13 +296,18 @@ public enum MenuBarLabelFormatter {
         }
 
         let isStale = item.freshness == .stale
-        let percent = Int(window.usedPercent.rounded(.down))
         return MenuBarIcon(
             glyph: .gauge(GaugeLevel.forUsedPercent(window.usedPercent)),
             style: style(for: window, freshness: item.freshness, now: now),
             isStale: isStale,
-            accessibilityText: "\(prefix) \(scopeName(for: window.scope)) \(percent)%"
+            accessibilityText: "\(prefix) \(scopeName(for: window.scope)) "
+                + safePercentText(window.usedPercent)
                 + (isStale ? "（更新が古い）" : ""))
+    }
+
+    private static func safePercentText(_ usedPercent: Double) -> String {
+        guard let percent = Int(exactly: usedPercent.rounded(.down)) else { return "値不明" }
+        return "\(percent)%"
     }
 
     /// アクセシビリティ用の枠名。表記は既存 UI（`SettingsView.windowKindOrderLabel`）に揃える。

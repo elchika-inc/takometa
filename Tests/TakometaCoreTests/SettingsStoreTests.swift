@@ -37,23 +37,35 @@ final class SettingsStoreTests: XCTestCase {
         }
     }
 
-    func testLegacyCompactInFileLoadsAsBalancedAndPersistsNewRawValue() throws {
-        try withTemporaryDirectory { directory in
-            try writeJSON("""
-            {"version":1,"displayMode":"compact","providerOrder":["codex","claude"],"providers":{}}
-            """, in: directory)
+    func testJSONReadsAllLegacyAndNewDisplayModeStringsAndPersistsCanonicalValue() throws {
+        let cases: [(String?, DisplayMode)] = [
+            ("compact", .balanced),
+            ("balanced", .full),
+            ("full", .full),
+            ("onePerProvider", .balanced),
+            ("icon", .compact),
+            ("future", .full),
+            (nil, .full),
+        ]
 
-            let store = try makeStore(directory: directory)
-            XCTAssertEqual(store.displayMode, .balanced)
+        for (rawValue, expected) in cases {
+            try withTemporaryDirectory { directory in
+                let displayModeField = rawValue.map { "\"displayMode\":\"\($0)\"," } ?? ""
+                try writeJSON("""
+                {"version":1,\(displayModeField)"providerOrder":["codex","claude"],"providers":{}}
+                """, in: directory)
 
-            // 保存し直された値が新しい rawValue になっていること
-            store.update(provider: "codex") { $0.usageThreshold = 80 }
-            let saved = try jsonObject(in: directory)
-            XCTAssertEqual(saved["displayMode"] as? String, "onePerProvider")
+                let store = try makeStore(directory: directory)
+                XCTAssertEqual(store.displayMode, expected, "永続化値: \(rawValue ?? "欠落")")
 
-            // 再読込しても繰り上がらないこと
-            let reloaded = try makeStore(directory: directory)
-            XCTAssertEqual(reloaded.displayMode, .balanced)
+                // 任意の保存を契機に旧値・未知値も新しい正規値へ置き換える。
+                store.update(provider: "codex") { $0.usageThreshold = 80 }
+                let saved = try jsonObject(in: directory)
+                XCTAssertEqual(saved["displayMode"] as? String, expected.rawValue)
+
+                let reloaded = try makeStore(directory: directory)
+                XCTAssertEqual(reloaded.displayMode, expected)
+            }
         }
     }
 

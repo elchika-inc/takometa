@@ -5,9 +5,10 @@ public enum GaugeLevel: Sendable, Equatable, CaseIterable {
 
     /// 使用率を5段階へ量子化する。境界は下限を含む（20% ちょうどは `.low`）。
     ///
-    /// NaN・無限大は `default` に落ちて `.max` になる。これは意図した挙動で、
+    /// NaN・正負の無限大は `.max` になる。これは意図した挙動で、
     /// 異常値は危険側へ倒す。針が振り切れていれば利用者が異常に気づける。
     public static func forUsedPercent(_ percent: Double) -> GaugeLevel {
+        guard percent.isFinite else { return .max }
         switch percent {
         case ..<20: return .zero
         case ..<40: return .low

@@ -28,14 +28,33 @@ final class SettingsMigrationTests: XCTestCase {
         }
     }
 
-    func testMigrateFromUserDefaultsAppliesLegacyDisplayModeMapping() throws {
+    func testMigrateFromUserDefaultsReadsAllLegacyAndNewDisplayModeStrings() throws {
         let (defaults, suiteName) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        defaults.set("compact", forKey: NotificationSettingsLoader.displayModeKey)
+        let cases: [(String?, DisplayMode)] = [
+            ("compact", .balanced),
+            ("balanced", .full),
+            ("full", .full),
+            ("onePerProvider", .balanced),
+            ("icon", .compact),
+            ("future", .full),
+            (nil, .full),
+        ]
 
-        let document = NotificationSettingsLoader.migrate(from: defaults)
+        for (rawValue, expected) in cases {
+            if let rawValue {
+                defaults.set(rawValue, forKey: NotificationSettingsLoader.displayModeKey)
+            } else {
+                defaults.removeObject(forKey: NotificationSettingsLoader.displayModeKey)
+            }
 
-        XCTAssertEqual(document.displayMode, .balanced)
+            let document = NotificationSettingsLoader.migrate(from: defaults)
+
+            XCTAssertEqual(document.displayMode, expected, "永続化値: \(rawValue ?? "欠落")")
+            XCTAssertEqual(
+                DisplayMode.fromPersistedValue(document.displayMode.rawValue), expected,
+                "再読込でモードが移動した: \(rawValue ?? "欠落")")
+        }
     }
 
     func testMigrateBuildsDocumentFromAllSixteenKeysAndDisplayMode() throws {

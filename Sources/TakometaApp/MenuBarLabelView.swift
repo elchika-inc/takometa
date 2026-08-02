@@ -97,8 +97,7 @@ struct MenuBarLabelView: View {
     ) -> (windows: [RateLimitWindow], freshness: Freshness)? {
         let override = provider == .codex ? codexStateOverride : claudeStateOverride
         let state = override ?? store.states[provider] ?? UsageStore.ProviderState()
-        guard let snapshot = state.snapshot else { return nil }
-        return (snapshot.windows, state.freshness)
+        return (state.snapshot?.windows ?? [], state.freshness)
     }
 
     @MainActor

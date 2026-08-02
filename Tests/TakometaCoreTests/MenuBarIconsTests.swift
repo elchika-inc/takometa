@@ -25,6 +25,7 @@ final class MenuBarIconsTests: XCTestCase {
         // 異常値は危険側へ倒す。針が振り切れていれば利用者が気づける
         XCTAssertEqual(GaugeLevel.forUsedPercent(.nan), .max)
         XCTAssertEqual(GaugeLevel.forUsedPercent(.infinity), .max)
+        XCTAssertEqual(GaugeLevel.forUsedPercent(-.infinity), .max)
     }
 
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
@@ -41,10 +42,13 @@ final class MenuBarIconsTests: XCTestCase {
     private func icons(
         codex: (windows: [RateLimitWindow], freshness: Freshness)? = nil,
         claude: (windows: [RateLimitWindow], freshness: Freshness)? = nil,
-        filter: DisplayFilter = DisplayFilter()
+        filter: DisplayFilter = DisplayFilter(),
+        order: [ProviderID] = [.codex, .claude],
+        labels: [ProviderID: String] = [:]
     ) -> MenuBarIcons {
         MenuBarLabelFormatter.formatCombinedIcons(
-            codex: codex, claude: claude, filter: filter, now: now)
+            codex: codex, claude: claude, filter: filter, now: now,
+            order: order, labels: labels)
     }
 
     func testOneIconPerVisibleProviderUsesMostConstrainedWindow() {
@@ -74,7 +78,9 @@ final class MenuBarIconsTests: XCTestCase {
             codex: ([], .unavailable),
             filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
 
-        XCTAssertEqual(result.icons[0].glyph, .unavailable)
+        XCTAssertEqual(result.icons, [MenuBarIcon(
+            glyph: .unavailable, style: .normal, isStale: false,
+            accessibilityText: "CX 取得できません")])
     }
 
     func testEmptyWindowListProducesUnavailableGlyph() {
@@ -87,10 +93,12 @@ final class MenuBarIconsTests: XCTestCase {
 
     func testAuthenticationRequiredProducesLockGlyph() {
         let result = icons(
-            codex: ([window(id: "w", scope: .weeklyAll, used: 50)], .authenticationRequired),
+            codex: ([], .authenticationRequired),
             filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
 
-        XCTAssertEqual(result.icons[0].glyph, .authenticationRequired)
+        XCTAssertEqual(result.icons, [MenuBarIcon(
+            glyph: .authenticationRequired, style: .normal, isStale: false,
+            accessibilityText: "CX 要認証")])
     }
 
     func testStaleIsMarkedWithoutChangingGlyph() {
@@ -98,9 +106,9 @@ final class MenuBarIconsTests: XCTestCase {
             codex: ([window(id: "w", scope: .weeklyAll, used: 50)], .stale),
             filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
 
-        XCTAssertEqual(result.icons[0].glyph, .gauge(.mid))
-        XCTAssertTrue(result.icons[0].isStale)
-        XCTAssertTrue(result.icons[0].accessibilityText.contains("更新が古い"))
+        XCTAssertEqual(result.icons, [MenuBarIcon(
+            glyph: .gauge(.mid), style: .normal, isStale: true,
+            accessibilityText: "CX 週間枠 50%（更新が古い）")])
     }
 
     func testAccessibilityTextJoinsProvidersWithTwoSpaces() {
@@ -109,5 +117,80 @@ final class MenuBarIconsTests: XCTestCase {
             claude: ([window(id: "s", scope: .session, used: 20, kind: .session)], .fresh))
 
         XCTAssertEqual(result.accessibilityText, "CX 週間枠 49%  CL 5時間枠 20%")
+    }
+
+    func testNilInputProducesUnavailableIconForVisibleProvider() {
+        let result = icons(
+            filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
+
+        XCTAssertEqual(result.icons, [MenuBarIcon(
+            glyph: .unavailable, style: .normal, isStale: false,
+            accessibilityText: "CX 取得できません")])
+    }
+
+    func testProviderOrderAndCustomLabelsAreApplied() {
+        let result = icons(
+            codex: ([window(id: "cw", scope: .weeklyAll, used: 30)], .fresh),
+            claude: ([window(id: "cs", scope: .session, used: 40, kind: .session)], .fresh),
+            order: [.claude, .codex],
+            labels: [.codex: "Codex", .claude: "Claude"])
+
+        XCTAssertEqual(
+            result.icons.map(\.accessibilityText),
+            ["Claude 5時間枠 40%", "Codex 週間枠 30%"])
+    }
+
+    func testWindowKindFiltersAreAppliedBeforeMostConstrainedSelection() {
+        let windows = [
+            window(id: "s", scope: .session, used: 95, kind: .session),
+            window(id: "w", scope: .weeklyAll, used: 85),
+            window(id: "m", scope: .model(id: "model", displayName: "Model"), used: 75),
+        ]
+        let cases: [(ProviderDisplayFilter, MenuBarIconGlyph)] = [
+            (.init(showSession: false), .gauge(.max)),
+            (.init(showSession: false, showWeekly: false), .gauge(.high)),
+            (.init(showSession: false, showModel: false), .gauge(.max)),
+        ]
+
+        for (providerFilter, expectedGlyph) in cases {
+            let result = icons(
+                codex: (windows, .fresh),
+                filter: DisplayFilter(
+                    codex: providerFilter,
+                    claude: ProviderDisplayFilter(show: false)))
+
+            XCTAssertEqual(result.icons[0].glyph, expectedGlyph)
+        }
+    }
+
+    func testIconStyleReflectsUsagePaceAndExhaustion() {
+        let cases: [(Double, TimeInterval, SegmentStyle)] = [
+            (10, 6 * 86400, .normal),
+            (20, 6 * 86400, .warning),
+            (100, 3600, .critical),
+        ]
+
+        for (used, resetsIn, expectedStyle) in cases {
+            let result = icons(
+                codex: ([window(
+                    id: "w", scope: .weeklyAll, used: used, resetsIn: resetsIn
+                )], .fresh),
+                filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
+
+            XCTAssertEqual(result.icons[0].style, expectedStyle)
+        }
+    }
+
+    func testNonFiniteAndOutOfRangePercentAreSafeInCombinedFormatter() {
+        let cases = [Double.nan, Double.infinity, -Double.infinity, Double.greatestFiniteMagnitude]
+
+        for used in cases {
+            let result = icons(
+                codex: ([window(id: "w", scope: .weeklyAll, used: used)], .fresh),
+                filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
+
+            XCTAssertEqual(result.icons[0].glyph, .gauge(.max))
+            XCTAssertEqual(result.icons[0].accessibilityText, "CX 週間枠 値不明")
+        }
     }
 }
