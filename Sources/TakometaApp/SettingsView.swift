@@ -90,6 +90,13 @@ struct SettingsView: View {
                     Text("1行").tag(MenuBarLineCount.one)
                     Text("2行").tag(MenuBarLineCount.two)
                 }
+                .disabled(settingsStore.displayMode == .compact)
+
+                if settingsStore.displayMode == .compact {
+                    Text("Compact はアイコンのみのため行数は適用されません")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section("起動") {
