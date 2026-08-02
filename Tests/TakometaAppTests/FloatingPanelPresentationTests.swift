@@ -4,15 +4,10 @@ import XCTest
 
 @MainActor
 final class FloatingPanelPresentationTests: XCTestCase {
-    func testPresentationActivatesApplicationBeforeOpeningWindow() {
-        var events: [String] = []
-
-        presentFloatingPanel(
-            activate: { events.append("activate") },
-            open: { events.append("open") })
-
-        XCTAssertEqual(events, ["activate", "open"])
-    }
+    // 旧 testPresentationActivatesApplicationBeforeOpeningWindow は削除した。
+    // activate→open の順序契約は Window シーン時代のもので、NSPanel 化
+    // （FloatingPanelController）によりアクティベーション自体が不要になった。
+    // 新しい表示契約は FloatingPanelControllerTests が固定する。
 
     func testToggleButtonFitsIconOnlyWidthForBothStates() throws {
         for isPresented in [false, true] {
