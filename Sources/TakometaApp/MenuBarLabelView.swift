@@ -25,7 +25,16 @@ struct MenuBarLabelView: View {
 
     @ViewBuilder
     var body: some View {
-        if settingsStore.menuBarLineCount == .two {
+        if settingsStore.displayMode == .compact {
+            let icons = formattedIcons
+            if icons.icons.isEmpty {
+                EmptyMenuBarLabelView()
+            } else {
+                Image(nsImage: renderedImage(for: MenuBarIconsView(icons: icons)))
+                    .renderingMode(.original)
+                    .accessibilityLabel(icons.accessibilityText)
+            }
+        } else if settingsStore.menuBarLineCount == .two {
             let columns = formattedColumns
             if columns.groups.isEmpty {
                 EmptyMenuBarLabelView()
@@ -57,6 +66,17 @@ struct MenuBarLabelView: View {
             order: settingsStore.providerOrder.compactMap(ProviderID.init(rawValue:)),
             labels: SettingsSupply.providerLabels(from: settingsStore.providers),
             kindOrders: SettingsSupply.windowKindOrders(from: settingsStore.providers))
+    }
+
+    private var formattedIcons: MenuBarIcons {
+        _ = store.revision
+        return MenuBarLabelFormatter.formatCombinedIcons(
+            codex: input(for: .codex),
+            claude: input(for: .claude),
+            filter: SettingsSupply.displayFilter(from: settingsStore.providers),
+            now: Date(),
+            order: settingsStore.providerOrder.compactMap(ProviderID.init(rawValue:)),
+            labels: SettingsSupply.providerLabels(from: settingsStore.providers))
     }
 
     private var formattedColumns: MenuBarColumns {
@@ -119,6 +139,52 @@ private struct MenuBarSegmentView: View {
     }
 }
 
+private struct MenuBarIconsView: View {
+    let icons: MenuBarIcons
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(Array(icons.icons.enumerated()), id: \.offset) { _, icon in
+                Image(systemName: symbolName(for: icon.glyph))
+                    .foregroundStyle(color(for: icon))
+                    // stale はマークを足さず不透明度で示す。Compact の存在理由が
+                    // 幅なので、ここで幅を増やすと目的と矛盾する
+                    .opacity(icon.isStale ? 0.45 : 1)
+            }
+        }
+        .font(.system(size: 13))
+        .fixedSize()
+    }
+
+    private func symbolName(for glyph: MenuBarIconGlyph) -> String {
+        switch glyph {
+        case .gauge(let level):
+            switch level {
+            case .zero: return "gauge.with.dots.needle.0percent"
+            case .low: return "gauge.with.dots.needle.33percent"
+            case .mid: return "gauge.with.dots.needle.50percent"
+            case .high: return "gauge.with.dots.needle.67percent"
+            case .max: return "gauge.with.dots.needle.100percent"
+            }
+        case .unavailable: return "questionmark.circle"
+        case .authenticationRequired: return "lock.circle"
+        }
+    }
+
+    private func color(for icon: MenuBarIcon) -> Color {
+        switch icon.glyph {
+        case .unavailable, .authenticationRequired:
+            return .secondary
+        case .gauge:
+            switch icon.style {
+            case .normal: return .primary
+            case .warning: return Color(nsColor: .systemOrange)
+            case .critical: return Color(nsColor: .systemRed)
+            }
+        }
+    }
+}
+
 private struct MenuBarColumnsView: View {
     let columns: MenuBarColumns
 
@@ -177,4 +243,34 @@ private struct MenuBarColumnsView: View {
         .padding(8)
         .background(.bar)
         .preferredColorScheme(.dark)
+}
+
+#Preview("アイコン表示 - 5段階") {
+    MenuBarIconsView(icons: MenuBarIcons(icons: [
+        MenuBarIcon(glyph: .gauge(.zero), style: .normal, isStale: false,
+                    accessibilityText: "CX 週間枠 10%"),
+        MenuBarIcon(glyph: .gauge(.low), style: .normal, isStale: false,
+                    accessibilityText: "CX 週間枠 30%"),
+        MenuBarIcon(glyph: .gauge(.mid), style: .normal, isStale: false,
+                    accessibilityText: "CX 週間枠 50%"),
+        MenuBarIcon(glyph: .gauge(.high), style: .warning, isStale: false,
+                    accessibilityText: "CX 週間枠 70%"),
+        MenuBarIcon(glyph: .gauge(.max), style: .critical, isStale: false,
+                    accessibilityText: "CX 週間枠 95%"),
+    ]))
+    .padding(8)
+    .background(.bar)
+}
+
+#Preview("アイコン表示 - 退化ケース") {
+    MenuBarIconsView(icons: MenuBarIcons(icons: [
+        MenuBarIcon(glyph: .gauge(.mid), style: .normal, isStale: true,
+                    accessibilityText: "CX 週間枠 50%（更新が古い）"),
+        MenuBarIcon(glyph: .unavailable, style: .normal, isStale: false,
+                    accessibilityText: "CX 取得できません"),
+        MenuBarIcon(glyph: .authenticationRequired, style: .normal, isStale: false,
+                    accessibilityText: "CL 要認証"),
+    ]))
+    .padding(8)
+    .background(.bar)
 }
