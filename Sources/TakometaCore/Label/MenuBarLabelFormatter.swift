@@ -278,6 +278,57 @@ public enum MenuBarLabelFormatter {
         return MenuBarIcons(icons: resolved.map { icon(for: $0, now: now) })
     }
 
+    public static func formatProviderCards(
+        codex: (windows: [RateLimitWindow], freshness: Freshness)?,
+        claude: (windows: [RateLimitWindow], freshness: Freshness)?,
+        filter: DisplayFilter,
+        now: Date,
+        order: [ProviderID] = [.codex, .claude],
+        kindOrders: [ProviderID: [WindowKindCategory]] = [:]
+    ) -> [ProviderCard] {
+        let resolved = resolveProviders(
+            codex: codex, claude: claude, filter: filter,
+            order: order, labels: [:], kindOrders: kindOrders)
+        return resolved.map { item in
+            card(for: item, now: now)
+        }
+    }
+
+    private static func card(for item: ResolvedProvider, now: Date) -> ProviderCard {
+        let name = item.provider == .codex ? "Codex" : "Claude"
+
+        if item.freshness == .authenticationRequired {
+            return ProviderCard(
+                name: name, ring: .authenticationRequired, rows: [], isStale: false)
+        }
+        guard item.freshness != .unavailable,
+              let top = item.windows.sorted(by: rankedBefore).first
+        else {
+            return ProviderCard(name: name, ring: .unavailable, rows: [], isStale: false)
+        }
+
+        let ordered = WindowKindOrdering.sorted(
+            item.windows, order: item.kindOrder,
+            category: { windowKindCategory(for: $0.scope) })
+        let rows = ordered.map { window in
+            ProviderCard.Row(
+                label: baseName(for: window.scope),
+                percent: cardPercent(window.usedPercent),
+                style: style(for: window, freshness: item.freshness, now: now))
+        }
+        return ProviderCard(
+            name: name,
+            ring: .gauge(
+                percent: cardPercent(top.usedPercent),
+                style: style(for: top, freshness: item.freshness, now: now)),
+            rows: rows,
+            isStale: item.freshness == .stale)
+    }
+
+    private static func cardPercent(_ usedPercent: Double) -> Int {
+        Int(exactly: usedPercent.rounded(.down)) ?? 100
+    }
+
     private static func icon(for item: ResolvedProvider, now: Date) -> MenuBarIcon {
         let prefix = resolvedPrefixTitle(provider: item.provider, custom: item.label)
 

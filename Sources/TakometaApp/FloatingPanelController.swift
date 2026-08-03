@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import SwiftUI
 import TakometaCore
 
@@ -15,17 +16,28 @@ import TakometaCore
 @MainActor
 final class FloatingPanelController: NSObject, NSWindowDelegate {
     private let settingsStore: SettingsStore
-    private let makeContent: () -> AnyView
+    private let observeContentChanges: () -> Void
+    private let makeContent: (FloatingPanelController) -> AnyView
     private var panel: NSPanel?
+    private var hosting: NSHostingController<AnyView>?
     private var isTerminating = false
 
     /// 位置・サイズの復元は AppKit の frame autosave に任せる（自前で持たない）
     private static let frameAutosaveName = "TakometaFloatingPanel"
+    private static let contentSizeProposal = CGSize(
+        width: CGFloat.greatestFiniteMagnitude,
+        height: CGFloat.greatestFiniteMagnitude)
 
-    init(settingsStore: SettingsStore, makeContent: @escaping () -> AnyView) {
+    init(
+        settingsStore: SettingsStore,
+        observeContentChanges: @escaping () -> Void = {},
+        makeContent: @escaping (FloatingPanelController) -> AnyView
+    ) {
         self.settingsStore = settingsStore
+        self.observeContentChanges = observeContentChanges
         self.makeContent = makeContent
         super.init()
+        observeContentSizeChanges()
         // 終了時の close は「ユーザーが閉じた」ではないので、設定へ書き戻さない。
         // selector ベースの observer は dealloc 時に自動解除されるため deinit 不要
         NotificationCenter.default.addObserver(
@@ -42,6 +54,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     func show() {
         let panel = self.panel ?? makePanel()
         self.panel = panel
+        refreshContentSize()
         // autosave が画面外の frame を復元することがある（ディスプレイ構成の変化や
         // 異常終了時の保存値）。はみ出したまま出すと一部しか見えないので画面内へ収める
         clampToVisibleScreen(panel)
@@ -62,7 +75,29 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         // アプリ終了に伴う close はユーザーの意思表示ではない
         guard !isTerminating else { return }
         panel = nil
+        hosting = nil
         settingsStore.updateShowsFloatingPanel(false)
+    }
+
+    func refreshContentSize() {
+        guard let panel, let hosting else { return }
+        let fittingSize = hosting.sizeThatFits(in: Self.contentSizeProposal)
+        guard fittingSize != panel.contentLayoutRect.size else { return }
+        panel.setContentSize(fittingSize)
+        clampToVisibleScreen(panel)
+    }
+
+    private func observeContentSizeChanges() {
+        // AppKit 側でサイズ追従用の依存を明示的に追跡し、SwiftUI 側の描画更新とは責務を分離する。
+        withObservationTracking {
+            observeContentChanges()
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.refreshContentSize()
+                self.observeContentSizeChanges()
+            }
+        }
     }
 
     // MARK: - Private
@@ -98,15 +133,17 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.becomesKeyOnlyIfNeeded = true
         panel.isReleasedWhenClosed = false
         panel.delegate = self
-        let hosting = NSHostingController(rootView: makeContent())
+        let hosting = NSHostingController(rootView: makeContent(self))
         // hosting にウィンドウの制約を触らせない。既定の sizingOptions のままだと
         // titled パネルで invalidateSafeAreaCornerInsets → 制約無効化 → レイアウト
         // の無限ループになり、AppKit が limit 超過（51回/サイクル）で例外を投げて
         // クラッシュする（実測: _postWindowNeedsUpdateConstraints で EXC_BREAKPOINT）
         hosting.sizingOptions = []
+        self.hosting = hosting
         panel.contentViewController = hosting
-        // サイズは表示時に内容へ合わせて自前で与える（hosting が触らないぶん）
-        panel.setContentSize(hosting.view.fittingSize)
+        // sizingOptions=[] では複合 View の fittingSize が 0x0 になることがあるため、
+        // 自動 sizing を戻さず sizeThatFits(in:) で手動測定する（単純な Text では再現しない）。
+        panel.setContentSize(hosting.sizeThatFits(in: Self.contentSizeProposal))
         panel.setFrameAutosaveName(Self.frameAutosaveName)
         if !panel.setFrameUsingName(Self.frameAutosaveName) {
             panel.center()

@@ -53,8 +53,13 @@ struct TakometaApp: App {
         _notificationDispatcher = State(initialValue: NotificationDispatcher())
         _panelController = State(initialValue: FloatingPanelController(
             settingsStore: settingsStore,
-            makeContent: {
-                AnyView(ProviderPopoverView(store: store, settingsStore: settingsStore))
+            observeContentChanges: {
+                observeProviderCardsPanelChanges(
+                    store: store, settingsStore: settingsStore)
+            },
+            makeContent: { controller in
+                providerCardsPanelContent(
+                    store: store, settingsStore: settingsStore)
             }))
     }
 
@@ -85,6 +90,21 @@ struct TakometaApp: App {
                 notificationDispatcher: notificationDispatcher)
         }
     }
+}
+
+@MainActor
+func providerCardsPanelContent(
+    store: UsageStore,
+    settingsStore: SettingsStore
+) -> AnyView {
+    AnyView(ProviderCardsView(store: store, settingsStore: settingsStore).fixedSize())
+}
+
+@MainActor
+func observeProviderCardsPanelChanges(store: UsageStore, settingsStore: SettingsStore) {
+    _ = store.states
+    _ = store.revision
+    _ = settingsStore.providers
 }
 
 /// 設定を正本としてパネルの表示を追従させる。パネル本体は SwiftUI の
