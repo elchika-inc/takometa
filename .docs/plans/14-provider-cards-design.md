@@ -59,6 +59,8 @@ TakometaApp:
 
 将来の WidgetKit 移植では、Widget の timeline provider が `ProviderCard` を組み立てて同じ View に渡す。View が `UsageStore` を直接見ないのはこのため。
 
+パネルの内容サイズ追従は `FloatingPanelController` 側で `withObservationTracking` を使う。`sizingOptions = []` の `NSHostingController` では複合 View（`ProviderCardsView`）の `fittingSize` が 0x0 になることがある（単純な `Text` では再現しない）ため、手動測定には `sizeThatFits(in:)` を使う。SwiftUI ツリー内の監視修飾子はこの問題とは無関係だが、AppKit 側 Observation の方が依存を正確に追跡できるためこの構造を採る。
+
 ## 5. スコープ外
 
 - 使用量推移グラフ（履歴はあるが、カード定着後に判断）

@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import SwiftUI
 import TakometaCore
 
@@ -15,6 +16,7 @@ import TakometaCore
 @MainActor
 final class FloatingPanelController: NSObject, NSWindowDelegate {
     private let settingsStore: SettingsStore
+    private let observeContentChanges: () -> Void
     private let makeContent: (FloatingPanelController) -> AnyView
     private var panel: NSPanel?
     private var hosting: NSHostingController<AnyView>?
@@ -22,14 +24,20 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     /// 位置・サイズの復元は AppKit の frame autosave に任せる（自前で持たない）
     private static let frameAutosaveName = "TakometaFloatingPanel"
+    private static let contentSizeProposal = CGSize(
+        width: CGFloat.greatestFiniteMagnitude,
+        height: CGFloat.greatestFiniteMagnitude)
 
     init(
         settingsStore: SettingsStore,
+        observeContentChanges: @escaping () -> Void = {},
         makeContent: @escaping (FloatingPanelController) -> AnyView
     ) {
         self.settingsStore = settingsStore
+        self.observeContentChanges = observeContentChanges
         self.makeContent = makeContent
         super.init()
+        observeContentSizeChanges()
         // 終了時の close は「ユーザーが閉じた」ではないので、設定へ書き戻さない。
         // selector ベースの observer は dealloc 時に自動解除されるため deinit 不要
         NotificationCenter.default.addObserver(
@@ -73,10 +81,23 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     func refreshContentSize() {
         guard let panel, let hosting else { return }
-        let fittingSize = hosting.view.fittingSize
+        let fittingSize = hosting.sizeThatFits(in: Self.contentSizeProposal)
         guard fittingSize != panel.contentLayoutRect.size else { return }
         panel.setContentSize(fittingSize)
         clampToVisibleScreen(panel)
+    }
+
+    private func observeContentSizeChanges() {
+        // AppKit 側で依存を正確に追跡し、SwiftUI の root は描画だけに保つ。
+        withObservationTracking {
+            observeContentChanges()
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.refreshContentSize()
+                self.observeContentSizeChanges()
+            }
+        }
     }
 
     // MARK: - Private
@@ -120,8 +141,9 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         hosting.sizingOptions = []
         self.hosting = hosting
         panel.contentViewController = hosting
-        // サイズは表示時に内容へ合わせて自前で与える（hosting が触らないぶん）
-        panel.setContentSize(hosting.view.fittingSize)
+        // sizingOptions=[] では複合 View の fittingSize が 0x0 になることがあるため、
+        // 自動 sizing を戻さず sizeThatFits(in:) で手動測定する（単純な Text では再現しない）。
+        panel.setContentSize(hosting.sizeThatFits(in: Self.contentSizeProposal))
         panel.setFrameAutosaveName(Self.frameAutosaveName)
         if !panel.setFrameUsingName(Self.frameAutosaveName) {
             panel.center()
