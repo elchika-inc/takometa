@@ -54,7 +54,7 @@ struct TakometaApp: App {
         _panelController = State(initialValue: FloatingPanelController(
             settingsStore: settingsStore,
             makeContent: {
-                AnyView(ProviderPopoverView(store: store, settingsStore: settingsStore))
+                AnyView(ProviderCardsView(store: store, settingsStore: settingsStore))
             }))
     }
 
