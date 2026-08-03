@@ -15,14 +15,18 @@ import TakometaCore
 @MainActor
 final class FloatingPanelController: NSObject, NSWindowDelegate {
     private let settingsStore: SettingsStore
-    private let makeContent: () -> AnyView
+    private let makeContent: (FloatingPanelController) -> AnyView
     private var panel: NSPanel?
+    private var hosting: NSHostingController<AnyView>?
     private var isTerminating = false
 
     /// 位置・サイズの復元は AppKit の frame autosave に任せる（自前で持たない）
     private static let frameAutosaveName = "TakometaFloatingPanel"
 
-    init(settingsStore: SettingsStore, makeContent: @escaping () -> AnyView) {
+    init(
+        settingsStore: SettingsStore,
+        makeContent: @escaping (FloatingPanelController) -> AnyView
+    ) {
         self.settingsStore = settingsStore
         self.makeContent = makeContent
         super.init()
@@ -42,6 +46,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     func show() {
         let panel = self.panel ?? makePanel()
         self.panel = panel
+        refreshContentSize()
         // autosave が画面外の frame を復元することがある（ディスプレイ構成の変化や
         // 異常終了時の保存値）。はみ出したまま出すと一部しか見えないので画面内へ収める
         clampToVisibleScreen(panel)
@@ -62,7 +67,16 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         // アプリ終了に伴う close はユーザーの意思表示ではない
         guard !isTerminating else { return }
         panel = nil
+        hosting = nil
         settingsStore.updateShowsFloatingPanel(false)
+    }
+
+    func refreshContentSize() {
+        guard let panel, let hosting else { return }
+        let fittingSize = hosting.view.fittingSize
+        guard fittingSize != panel.contentLayoutRect.size else { return }
+        panel.setContentSize(fittingSize)
+        clampToVisibleScreen(panel)
     }
 
     // MARK: - Private
@@ -98,12 +112,13 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         panel.becomesKeyOnlyIfNeeded = true
         panel.isReleasedWhenClosed = false
         panel.delegate = self
-        let hosting = NSHostingController(rootView: makeContent())
+        let hosting = NSHostingController(rootView: makeContent(self))
         // hosting にウィンドウの制約を触らせない。既定の sizingOptions のままだと
         // titled パネルで invalidateSafeAreaCornerInsets → 制約無効化 → レイアウト
         // の無限ループになり、AppKit が limit 超過（51回/サイクル）で例外を投げて
         // クラッシュする（実測: _postWindowNeedsUpdateConstraints で EXC_BREAKPOINT）
         hosting.sizingOptions = []
+        self.hosting = hosting
         panel.contentViewController = hosting
         // サイズは表示時に内容へ合わせて自前で与える（hosting が触らないぶん）
         panel.setContentSize(hosting.view.fittingSize)

@@ -313,16 +313,20 @@ public enum MenuBarLabelFormatter {
         let rows = ordered.map { window in
             ProviderCard.Row(
                 label: baseName(for: window.scope),
-                percent: Int(window.usedPercent.rounded(.down)),
+                percent: cardPercent(window.usedPercent),
                 style: style(for: window, freshness: item.freshness, now: now))
         }
         return ProviderCard(
             name: name,
             ring: .gauge(
-                percent: Int(top.usedPercent.rounded(.down)),
+                percent: cardPercent(top.usedPercent),
                 style: style(for: top, freshness: item.freshness, now: now)),
             rows: rows,
             isStale: item.freshness == .stale)
+    }
+
+    private static func cardPercent(_ usedPercent: Double) -> Int {
+        Int(exactly: usedPercent.rounded(.down)) ?? 100
     }
 
     private static func icon(for item: ResolvedProvider, now: Date) -> MenuBarIcon {

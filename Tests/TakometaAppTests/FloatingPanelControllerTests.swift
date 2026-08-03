@@ -17,7 +17,7 @@ final class FloatingPanelControllerTests: XCTestCase {
     private func makeController(store: SettingsStore) -> FloatingPanelController {
         FloatingPanelController(
             settingsStore: store,
-            makeContent: { AnyView(Text("panel")) })
+            makeContent: { _ in AnyView(Text("panel").fixedSize()) })
     }
 
     func testUserCloseWritesBackFalse() throws {
@@ -76,5 +76,24 @@ final class FloatingPanelControllerTests: XCTestCase {
         XCTAssertTrue(panel.collectionBehavior.contains(.canJoinAllSpaces))
         XCTAssertTrue(panel.collectionBehavior.contains(.fullScreenAuxiliary))
         XCTAssertFalse(panel.hidesOnDeactivate)
+    }
+
+    func testRefreshContentSizeRestoresHostingFittingSize() throws {
+        let (store, directory) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let controller = makeController(store: store)
+
+        controller.show()
+        let panel = try XCTUnwrap(NSApp.windows.compactMap { $0 as? NSPanel }.first {
+            $0.title == "Takometa"
+        })
+        defer { panel.orderOut(nil) }
+        let expected = try XCTUnwrap(panel.contentViewController).view.fittingSize
+        panel.setContentSize(NSSize(width: 1, height: 1))
+
+        controller.refreshContentSize()
+
+        XCTAssertEqual(panel.contentLayoutRect.width, expected.width, accuracy: 0.01)
+        XCTAssertEqual(panel.contentLayoutRect.height, expected.height, accuracy: 0.01)
     }
 }

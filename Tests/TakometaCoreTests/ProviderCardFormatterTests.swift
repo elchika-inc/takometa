@@ -89,6 +89,22 @@ final class ProviderCardFormatterTests: XCTestCase {
         XCTAssertEqual(result[0].ring, .gauge(percent: 52, style: .normal))
     }
 
+    func testUnrepresentablePercentFallsBackToFullGauge() {
+        let cases = [Double.nan, .infinity, -.infinity, Double.greatestFiniteMagnitude]
+
+        for used in cases {
+            let result = cards(
+                codex: ([window(id: "w", scope: .weeklyAll, used: used)], .fresh),
+                filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
+
+            guard case .gauge(let percent, _) = result[0].ring else {
+                return XCTFail("表現不能な値が危険側の gauge へ退化していない: \(used)")
+            }
+            XCTAssertEqual(percent, 100)
+            XCTAssertEqual(result[0].rows.map(\.percent), [100])
+        }
+    }
+
     func testHiddenProviderProducesNoCard() {
         let result = cards(
             codex: ([window(id: "w", scope: .weeklyAll, used: 52)], .fresh),

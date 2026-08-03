@@ -53,8 +53,11 @@ struct TakometaApp: App {
         _notificationDispatcher = State(initialValue: NotificationDispatcher())
         _panelController = State(initialValue: FloatingPanelController(
             settingsStore: settingsStore,
-            makeContent: {
-                AnyView(ProviderCardsView(store: store, settingsStore: settingsStore))
+            makeContent: { controller in
+                AnyView(ProviderCardsView(store: store, settingsStore: settingsStore)
+                    .onChange(of: store.revision) { [weak controller] _, _ in
+                        controller?.refreshContentSize()
+                    })
             }))
     }
 
