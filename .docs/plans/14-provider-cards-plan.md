@@ -132,6 +132,22 @@ final class ProviderCardFormatterTests: XCTestCase {
         XCTAssertEqual(result[0].ring, .gauge(percent: 52, style: .normal))
     }
 
+    func testUnrepresentablePercentFallsBackToFullGauge() {
+        let cases = [Double.nan, .infinity, -.infinity, Double.greatestFiniteMagnitude]
+
+        for used in cases {
+            let result = cards(
+                codex: ([window(id: "w", scope: .weeklyAll, used: used)], .fresh),
+                filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
+
+            guard case .gauge(let percent, _) = result[0].ring else {
+                return XCTFail("表現不能な値が危険側の gauge へ退化していない: \(used)")
+            }
+            XCTAssertEqual(percent, 100)
+            XCTAssertEqual(result[0].rows.map(\.percent), [100])
+        }
+    }
+
     func testHiddenProviderProducesNoCard() {
         let result = cards(
             codex: ([window(id: "w", scope: .weeklyAll, used: 52)], .fresh),
@@ -244,20 +260,25 @@ public struct ProviderCard: Sendable, Equatable {
         let rows = ordered.map { window in
             ProviderCard.Row(
                 label: baseName(for: window.scope),
-                percent: Int(window.usedPercent.rounded(.down)),
+                percent: cardPercent(window.usedPercent),
                 style: style(for: window, freshness: item.freshness, now: now))
         }
         return ProviderCard(
             name: name,
             ring: .gauge(
-                percent: Int(top.usedPercent.rounded(.down)),
+                percent: cardPercent(top.usedPercent),
                 style: style(for: top, freshness: item.freshness, now: now)),
             rows: rows,
             isStale: item.freshness == .stale)
     }
+
+    private static func cardPercent(_ usedPercent: Double) -> Int {
+        Int(exactly: usedPercent.rounded(.down)) ?? 100
+    }
 ```
 
 `resolveProviders` は `filter` で枠を絞った `windows` を返すため、`item.windows` が空 = 表示対象の枠が0個であり、`unavailable` へ落ちる（テスト `testEmptyVisibleWindowsProducesUnavailableRing` が固定する）。
+`Int` へ表現できない非有限値・範囲外値は trap や 0% 表示にせず、既存 `GaugeLevel` と同じく危険側の 100% へ倒す。
 
 - [ ] **Step 5: テストが通ることを確認する**
 
@@ -296,8 +317,11 @@ Refs #14"
 
 **Files:**
 - Create: `Sources/TakometaApp/ProviderCardsView.swift`
-- Modify: `Sources/TakometaApp/TakometaApp.swift`（`FloatingPanelController` の `makeContent` を差し替え）
+- Modify: `Sources/TakometaApp/TakometaApp.swift`（カード内容とサイズ監視依存を接続）
+- Modify: `Sources/TakometaApp/FloatingPanelController.swift`（内容変更時の手動サイズ追従）
+- Modify: `.docs/plans/14-provider-cards-design.md`（手動測定の設計判断を記録）
 - Test: `Tests/TakometaAppTests/ProviderCardsRenderingTests.swift`
+- Test: `Tests/TakometaAppTests/FloatingPanelControllerTests.swift`
 
 **Interfaces:**
 - Consumes: Task 1 の `ProviderCard` / `formatProviderCards`、既存の `UsageStore` / `SettingsStore` / `SettingsSupply`
@@ -450,16 +474,95 @@ struct ProviderCardView: View {
 
 `menuBarInput(from:)` は既存の関数（`MenuBarLabelView.swift`）。snapshot がなくても freshness を保持する経路として #8 で導入済みのものを再利用する。
 
-- [ ] **Step 2: パネルの中身を差し替える**
+- [ ] **Step 2: パネルの中身とサイズ追従を差し替える**
 
-`Sources/TakometaApp/TakometaApp.swift` の `FloatingPanelController` 生成箇所を変更する。
+`Sources/TakometaApp/TakometaApp.swift` の `FloatingPanelController` 生成箇所を変更し、描画用 root と監視する依存を分離する。
 
 ```swift
         _panelController = State(initialValue: FloatingPanelController(
             settingsStore: settingsStore,
-            makeContent: {
-                AnyView(ProviderCardsView(store: store, settingsStore: settingsStore))
+            observeContentChanges: {
+                observeProviderCardsPanelChanges(
+                    store: store, settingsStore: settingsStore)
+            },
+            makeContent: { _ in
+                providerCardsPanelContent(
+                    store: store, settingsStore: settingsStore)
             }))
+```
+
+同ファイルに描画用 root と Observation が読む依存を追加する。
+
+```swift
+@MainActor
+func providerCardsPanelContent(
+    store: UsageStore,
+    settingsStore: SettingsStore
+) -> AnyView {
+    AnyView(ProviderCardsView(store: store, settingsStore: settingsStore).fixedSize())
+}
+
+@MainActor
+func observeProviderCardsPanelChanges(store: UsageStore, settingsStore: SettingsStore) {
+    _ = store.states
+    _ = store.revision
+    _ = settingsStore.providers
+}
+```
+
+`Sources/TakometaApp/FloatingPanelController.swift` では `Observation` を import し、`observeContentChanges` と hosting を保持する。`sizingOptions = []` は #11 の無限ループ回避のため維持し、複合 View で 0x0 になり得る `view.fittingSize` ではなく `sizeThatFits(in:)` を使う。
+
+```swift
+    private let observeContentChanges: () -> Void
+    private let makeContent: (FloatingPanelController) -> AnyView
+    private var panel: NSPanel?
+    private var hosting: NSHostingController<AnyView>?
+
+    private static let contentSizeProposal = CGSize(
+        width: CGFloat.greatestFiniteMagnitude,
+        height: CGFloat.greatestFiniteMagnitude)
+
+    init(
+        settingsStore: SettingsStore,
+        observeContentChanges: @escaping () -> Void = {},
+        makeContent: @escaping (FloatingPanelController) -> AnyView
+    ) {
+        self.settingsStore = settingsStore
+        self.observeContentChanges = observeContentChanges
+        self.makeContent = makeContent
+        super.init()
+        observeContentSizeChanges()
+        // 既存の NotificationCenter observer 登録は続ける
+    }
+
+    func refreshContentSize() {
+        guard let panel, let hosting else { return }
+        let fittingSize = hosting.sizeThatFits(in: Self.contentSizeProposal)
+        guard fittingSize != panel.contentLayoutRect.size else { return }
+        panel.setContentSize(fittingSize)
+        clampToVisibleScreen(panel)
+    }
+
+    private func observeContentSizeChanges() {
+        withObservationTracking {
+            observeContentChanges()
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.refreshContentSize()
+                self.observeContentSizeChanges()
+            }
+        }
+    }
+```
+
+`show()` は panel を保持した直後に `refreshContentSize()` を呼ぶ。`makePanel()` は `makeContent(self)` で hosting を作ってプロパティへ保持し、初期サイズも次で与える。
+
+```swift
+        hosting.sizingOptions = []
+        self.hosting = hosting
+        panel.contentViewController = hosting
+        panel.setContentSize(hosting.sizeThatFits(in: Self.contentSizeProposal))
 ```
 
 - [ ] **Step 3: 描画スモークテストを書く**
@@ -528,7 +631,111 @@ final class ProviderCardsRenderingTests: XCTestCase {
 }
 ```
 
-- [ ] **Step 4: ビルドとテストを通す**
+- [ ] **Step 4: パネルサイズ追従テストを書く**
+
+`Tests/TakometaAppTests/FloatingPanelControllerTests.swift` にテスト用 provider と、実 `NSPanel` の高さ・幅が内容変更へ追従する2テストを追加する。テスト用 `SettingsStore` は既存 `makeStore()` で UserDefaults を隔離する。
+
+```swift
+private struct FloatingPanelTestProvider: UsageProvider {
+    let id: ProviderID = .codex
+    let normalInterval: TimeInterval = 300
+
+    func fetch() async throws -> UsageSnapshot {
+        throw UsageFetchError.transient(reason: "test")
+    }
+
+    func updates() -> AsyncStream<UsageSnapshot> {
+        AsyncStream { $0.finish() }
+    }
+}
+
+    func testUsageStateChangeRefreshesProviderCardsHeight() async throws {
+        let (settingsStore, directory) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = SnapshotCache(directory: directory.appendingPathComponent("cache"))
+        try cache.save(UsageSnapshot(
+            provider: .codex,
+            windows: [
+                RateLimitWindow(
+                    id: "session", label: "session", scope: .session,
+                    usedPercent: 20, resetsAt: nil, kind: .session),
+                RateLimitWindow(
+                    id: "weekly", label: "weekly", scope: .weeklyAll,
+                    usedPercent: 40, resetsAt: nil, kind: .weekly),
+            ],
+            fetchedAt: Date(),
+            source: .codexAppServer))
+        let usageStore = UsageStore(
+            providers: [FloatingPanelTestProvider()],
+            cache: cache,
+            scheduler: TimerScheduler())
+        let controller = FloatingPanelController(
+            settingsStore: settingsStore,
+            observeContentChanges: {
+                observeProviderCardsPanelChanges(
+                    store: usageStore, settingsStore: settingsStore)
+            }
+        ) { _ in
+            providerCardsPanelContent(
+                store: usageStore, settingsStore: settingsStore)
+        }
+
+        controller.show()
+        let panel = try XCTUnwrap(NSApp.windows.compactMap { $0 as? NSPanel }.first {
+            $0.title == "Takometa"
+        })
+        defer { panel.orderOut(nil) }
+        let initialHeight = panel.contentLayoutRect.height
+        XCTAssertGreaterThan(initialHeight, 0)
+
+        usageStore.start()
+        try await waitUntil { panel.contentLayoutRect.height > initialHeight }
+
+        XCTAssertGreaterThan(panel.contentLayoutRect.height, initialHeight)
+    }
+
+    func testProviderVisibilityChangeRefreshesProviderCardsWidth() async throws {
+        let (settingsStore, directory) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let usageStore = UsageStore(
+            providers: [FloatingPanelTestProvider()],
+            cache: SnapshotCache(directory: directory.appendingPathComponent("cache")),
+            scheduler: TimerScheduler())
+        let controller = FloatingPanelController(
+            settingsStore: settingsStore,
+            observeContentChanges: {
+                observeProviderCardsPanelChanges(
+                    store: usageStore, settingsStore: settingsStore)
+            }
+        ) { _ in
+            providerCardsPanelContent(
+                store: usageStore, settingsStore: settingsStore)
+        }
+
+        controller.show()
+        let panel = try XCTUnwrap(NSApp.windows.compactMap { $0 as? NSPanel }.first {
+            $0.title == "Takometa"
+        })
+        defer { panel.orderOut(nil) }
+        let initialWidth = panel.contentLayoutRect.width
+
+        settingsStore.update(provider: ProviderID.codex.rawValue) { $0.show = false }
+        try await waitUntil { panel.contentLayoutRect.width < initialWidth }
+
+        XCTAssertLessThan(panel.contentLayoutRect.width, initialWidth)
+    }
+
+    private func waitUntil(_ predicate: () -> Bool) async throws {
+        for _ in 0..<100 {
+            if predicate() { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+```
+
+既存の手動更新テストも `view.fittingSize` ではなく `hosting.sizeThatFits(in:)` の測定値へ復元することを固定する。
+
+- [ ] **Step 5: ビルドとテストを通す**
 
 ```bash
 swift build
@@ -540,12 +747,15 @@ swift test
 
 期待: 全 PASS。
 
-- [ ] **Step 5: コミット**
+- [ ] **Step 6: コミット**
 
 ```bash
 git add Sources/TakometaApp/ProviderCardsView.swift \
+        Sources/TakometaApp/FloatingPanelController.swift \
         Sources/TakometaApp/TakometaApp.swift \
-        Tests/TakometaAppTests/ProviderCardsRenderingTests.swift
+        Tests/TakometaAppTests/ProviderCardsRenderingTests.swift \
+        Tests/TakometaAppTests/FloatingPanelControllerTests.swift \
+        .docs/plans/14-provider-cards-design.md
 git commit -m "feat: パネルを Stats 風のリングゲージカード表示にする
 
 パネルは「眺める用」としてカード表示（リング＋内訳行）へ差し替え、
