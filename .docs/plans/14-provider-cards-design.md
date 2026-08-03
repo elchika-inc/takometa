@@ -43,7 +43,7 @@ stale の減光値はメニューバーアイコン（0.45）より弱い 0.6 �
 
 ## 4. アーキテクチャ
 
-#4 の `MenuBarIcons` と同じパターン。**選択と色のロジックは Core、View は写すだけ**。
+#4 の `MenuBarIcons` と同じパターン。**選択と色のロジックは Core、カード1枚の View は写すだけ**。
 
 ```
 TakometaCore:
@@ -51,13 +51,14 @@ TakometaCore:
   MenuBarLabelFormatter.formatProviderCards(...)  ← resolveProviders / rankedBefore /
                                                      style / baseName を再利用
 TakometaApp:
-  ProviderCardsView（ProviderCard の配列を描くだけ）
+  ProviderCardsView（UsageStore / SettingsStore から ProviderCard の配列を組み立てるコンテナ）
+  ProviderCardView（ProviderCard だけを受け取ってカード1枚を描く）
   FloatingPanelController.makeContent を ProviderCardsView へ差し替え
 ```
 
 `formatProviderCards` は `MenuBarLabelFormatter.swift` 内に置く。再利用する4ヘルパーがすべて `private static` であり、同一ファイル内の宣言からのみ到達できるため。ファイル分離より再利用を優先する（ヘルパーの可視性を internal へ広げると公開面が増える）。
 
-将来の WidgetKit 移植では、Widget の timeline provider が `ProviderCard` を組み立てて同じ View に渡す。View が `UsageStore` を直接見ないのはこのため。
+将来の WidgetKit 移植では、Widget の timeline provider が `ProviderCard` を組み立てて `ProviderCardView` に渡す。`ProviderCardView` が `UsageStore` を直接見ないのはこのため。
 
 パネルの内容サイズ追従は `FloatingPanelController` 側で `withObservationTracking` を使う。`sizingOptions = []` の `NSHostingController` では複合 View（`ProviderCardsView`）の `fittingSize` が 0x0 になることがある（単純な `Text` では再現しない）ため、手動測定には `sizeThatFits(in:)` を使う。SwiftUI ツリー内の監視修飾子はこの問題とは無関係だが、AppKit 側 Observation の方が依存を正確に追跡できるためこの構造を採る。
 
