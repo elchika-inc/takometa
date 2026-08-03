@@ -88,7 +88,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
     }
 
     private func observeContentSizeChanges() {
-        // AppKit 側で依存を正確に追跡し、SwiftUI の root は描画だけに保つ。
+        // AppKit 側でサイズ追従用の依存を明示的に追跡し、SwiftUI 側の描画更新とは責務を分離する。
         withObservationTracking {
             observeContentChanges()
         } onChange: { [weak self] in

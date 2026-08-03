@@ -4,7 +4,7 @@
 
 **Goal:** フローティングパネルを Stats 風のリングゲージカード表示にする。
 
-**Architecture:** `TakometaCore` に `ProviderCard`（値型）と `formatProviderCards`（既存の選択・色ロジックを再利用する純粋関数）を置き、`TakometaApp` の `ProviderCardsView` はそれを描くだけにする。パネルの中身をポップオーバー流用からカード表示へ差し替える。ポップオーバー自体は変更しない。
+**Architecture:** `TakometaCore` に `ProviderCard`（値型）と `formatProviderCards`（既存の選択・色ロジックを再利用する純粋関数）を置く。`TakometaApp` の `ProviderCardsView` は store / settings から `ProviderCard` 配列を組み立てる stateful container、`ProviderCardView` は `ProviderCard` だけを描画する value-only leaf とする。パネルの中身をポップオーバー流用からカード表示へ差し替える。ポップオーバー自体は変更しない。
 
 **Tech Stack:** Swift 6.2 / SwiftUI / XCTest / SwiftPM
 
