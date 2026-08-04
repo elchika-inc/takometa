@@ -50,7 +50,7 @@
 - RISKS:（該当 URISK/RISK ID を引用。発見時はレジストリに新規追加）
 - ACCEPTED_RISKS:（受容したリスク ID と根拠）
 - MERGE_READINESS:
-- NEXT_ACTION:（セッション跨ぎのタスクは Issue に書く）
+- NEXT_ACTION:（セッション跨ぎのタスクは `.docs/actions/` へ `actionctl` で起票する — standards DOCS_OPS §3 の決定表。Issue と二重に持たない）
 
 ## レビューサイクル（INSPECTION_STATUS）
 コード変更を含むサイクルでは、該当レビュアーを起動し（下表。pr-review-toolkit 系は agent、parallel-review-cycle は skill）、**flag された確信度80%以上の指摘が0／明示受容済みになるまで「修正→再レビュー」を反復**する（グローバルの「レビューサイクル」原則の機構実装。flag / optional の定義は `~/.claude/references/agent-output-principles.md`）。

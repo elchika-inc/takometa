@@ -35,8 +35,10 @@
 ```
 .docs/
   PROJECT_GOAL.md                 # ゴールと完了条件（正本）
-  RELEASE.md                      # リリース・配布手順と記録
+  actions/                        # セッションを跨ぐ離散タスク（Action Queue）
   plans/                          # issue 番号付きの設計書・実装計画
+  risk-registry.md                # 明示受容したリスク
+  runbooks/RELEASE.md             # リリース・配布手順と記録
 ```
 
 ## Security Notes
@@ -48,7 +50,7 @@
 
 ## 配布を受けた方へ
 
-次の本文は zip 同梱の `はじめにお読みください.txt` および `.docs/RELEASE.md` の配布テンプレートと同一です。
+次の本文は zip 同梱の `はじめにお読みください.txt` および `.docs/runbooks/RELEASE.md` の配布テンプレートと同一です。
 
 <!-- TAKOMETA_GUIDE_BEGIN -->
 # Takometa はじめにお読みください

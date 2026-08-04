@@ -5,7 +5,7 @@ script_dir=$(cd "$(dirname "$0")" && pwd -P)
 repo_root=$(cd "$script_dir/.." && pwd -P)
 release_root="$repo_root/dist/release"
 source_guide="$repo_root/はじめにお読みください.txt"
-source_release="$repo_root/.docs/RELEASE.md"
+source_release="$repo_root/.docs/runbooks/RELEASE.md"
 source_readme="$repo_root/README.md"
 source_checks="$script_dir/release-checks"
 injection_spec=${TAKOMETA_RELEASE_INJECT:-}
@@ -408,7 +408,7 @@ observe_v5() {
     if [[ -s "$absolute_paths" ]]; then
         local count
         count=$(wc -l < "$absolute_paths" | tr -d ' ')
-        echo "WARNING[V-5]: distribution binary contains $count absolute path string(s); record the observation in .docs/RELEASE.md" >&2
+        echo "WARNING[V-5]: distribution binary contains $count absolute path string(s); record the observation in .docs/runbooks/RELEASE.md" >&2
         sed -n '1,20p' "$absolute_paths" >&2
     else
         echo "INFO[V-5]: no absolute path strings observed" >&2

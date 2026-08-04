@@ -11,7 +11,7 @@ Codex と Claude Code のレート制限（5時間枠・週間枠・モデル固
 
 - スタック: Swift 6.2 + SwiftUI の macOS ネイティブアプリ（`MenuBarExtra` 常駐・`LSUIElement`）。
 - Cloudflare Web スタック（pnpm / Vite Plus / biome / design-tokens / legal）は本リポジトリでは適用外。
-- standards_version: 2026-07-18 (rev.35)。
+- standards_version: 2026-08-04 (rev.56)。
 - branch_policy: `unprotected`（public リポジトリでは branch protection を利用できるが、現時点では設定していない。エージェントの `main` 直接 push 禁止は DOCS_OPS.md §5 の MUST により運用する）。
 
 ## Key Commands
