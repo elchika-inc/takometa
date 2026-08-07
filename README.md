@@ -30,6 +30,14 @@
 | `scripts/make-release.sh <version>` | universal の配布用 zip と SHA256 を生成 |
 | `swift run takometa-spike <codex\|claude\|statusline> [--emit-fixture <path>]` | 取得スパイク |
 
+### git worktree での並行作業
+
+`.worktreeinclude` は、worktree を作るときに主チェックアウトから追加コピーするファイルを列挙します。対象は git 管理外のエージェントローカル設定（`.claude/settings.local.json`・`.codex/`）だけです。git worktree は追跡ファイルしか持ち込まないため、これらは明示しないと新しい worktree で失われます。
+
+このファイルを読むのは [Orca](https://www.onorca.dev/docs/model/worktrees) などの worktree 管理ツールです。`git worktree` を直接使う場合は読まれないので、必要なら手でコピーしてください。
+
+ビルド成果物 `.build/` は共有しません。worktree ごとにソースが異なるため共有すると相互に上書きし合い、依存の取得キャッシュは SwiftPM が `~/.swiftpm` 側で既に共有しています。
+
 ## Documents
 
 ```
