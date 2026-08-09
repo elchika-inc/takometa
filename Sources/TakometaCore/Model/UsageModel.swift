@@ -5,6 +5,14 @@ public enum ProviderID: String, Sendable, Codable, Hashable {
     case claude
 }
 
+/// UI・読み上げ用のプロバイダ表示名。旧 CL / CX 略称の後継。
+public func providerDisplayName(_ provider: ProviderID) -> String {
+    switch provider {
+    case .codex: return "Codex"
+    case .claude: return "Claude"
+    }
+}
+
 public enum UsageSource: String, Sendable, Codable {
     case codexAppServer
     case claudeOAuth

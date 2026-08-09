@@ -51,7 +51,7 @@ struct SettingsView: View {
                 ForEach(orderedProviders, id: \.rawValue) { provider in
                     providerTab(provider: provider)
                         .tabItem {
-                            Label(providerDisplayName(provider), systemImage: providerIcon(provider))
+                            Label(TakometaCore.providerDisplayName(provider), systemImage: providerIcon(provider))
                         }
                         .tag(SettingsTab.provider(provider.rawValue))
                 }
@@ -328,16 +328,9 @@ struct SettingsView: View {
         }
     }
 
-    private func providerDisplayName(_ provider: ProviderID) -> String {
-        switch provider {
-        case .codex: "Codex"
-        case .claude: "Claude"
-        }
-    }
-
     private func providerDisplayName(_ providerID: String) -> String {
         guard let provider = ProviderID(rawValue: providerID) else { return providerID }
-        return providerDisplayName(provider)
+        return TakometaCore.providerDisplayName(provider)
     }
 
     private func providerIcon(_ provider: ProviderID) -> String {

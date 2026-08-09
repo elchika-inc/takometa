@@ -1,6 +1,13 @@
 import XCTest
 @testable import TakometaCore
 
+final class ProviderDisplayNameTests: XCTestCase {
+    func testDisplayNames() {
+        XCTAssertEqual(providerDisplayName(.codex), "Codex")
+        XCTAssertEqual(providerDisplayName(.claude), "Claude")
+    }
+}
+
 final class MenuBarLabelFormatterTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
