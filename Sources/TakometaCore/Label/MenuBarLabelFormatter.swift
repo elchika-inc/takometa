@@ -107,7 +107,6 @@ public enum MenuBarLabelFormatter {
         let provider: ProviderID
         let windows: [RateLimitWindow]
         let freshness: Freshness
-        let label: String
         let kindOrder: [WindowKindCategory]
     }
 
@@ -137,22 +136,11 @@ public enum MenuBarLabelFormatter {
         }
     }
 
-    private static func resolvedPrefix(provider: ProviderID, custom: String) -> String {
-        let stripped = String(custom.unicodeScalars.filter {
-            !CharacterSet.controlCharacters.contains($0) && !CharacterSet.newlines.contains($0)
-        })
-        let trimmed = stripped.trimmingCharacters(in: .whitespaces)
-        let clamped = String(trimmed.prefix(6))
-        let base = clamped.isEmpty ? (provider == .codex ? "CX" : "CL") : clamped
-        return base + " "
-    }
-
     private static func resolveProviders(
         codex: (windows: [RateLimitWindow], freshness: Freshness)?,
         claude: (windows: [RateLimitWindow], freshness: Freshness)?,
         filter: DisplayFilter,
         order: [ProviderID],
-        labels: [ProviderID: String],
         kindOrders: [ProviderID: [WindowKindCategory]]
     ) -> [ResolvedProvider] {
         var result: [ResolvedProvider] = []
@@ -173,7 +161,6 @@ public enum MenuBarLabelFormatter {
                 provider: provider,
                 windows: filtered(input.windows, by: providerFilter),
                 freshness: input.freshness,
-                label: labels[provider] ?? "",
                 kindOrder: kindOrders[provider] ?? WindowKindCategory.defaultOrder))
         }
         return result
@@ -233,7 +220,7 @@ public enum MenuBarLabelFormatter {
     ) -> MenuBarLabel {
         let resolved = resolveProviders(
             codex: codex, claude: claude, filter: filter,
-            order: order, labels: [:], kindOrders: kindOrders)
+            order: order, kindOrders: kindOrders)
 
         return MenuBarLabel(groups: resolved.map { item in
             MenuBarLabel.Group(provider: item.provider, segments: format(
@@ -257,7 +244,7 @@ public enum MenuBarLabelFormatter {
     ) -> MenuBarColumns {
         let resolved = resolveProviders(
             codex: codex, claude: claude, filter: filter,
-            order: order, labels: [:], kindOrders: kindOrders)
+            order: order, kindOrders: kindOrders)
 
         let groups = resolved.map { item in
             MenuBarColumns.Group(
@@ -277,13 +264,12 @@ public enum MenuBarLabelFormatter {
         claude: (windows: [RateLimitWindow], freshness: Freshness)?,
         filter: DisplayFilter,
         now: Date,
-        order: [ProviderID] = [.codex, .claude],
-        labels: [ProviderID: String] = [:]
+        order: [ProviderID] = [.codex, .claude]
     ) -> MenuBarIcons {
         // アイコンは1プロバイダ1個のため枠種別の並び順は影響しない。kindOrders は空で渡す。
         let resolved = resolveProviders(
             codex: codex, claude: claude, filter: filter,
-            order: order, labels: labels, kindOrders: [:])
+            order: order, kindOrders: [:])
         return MenuBarIcons(icons: resolved.map { icon(for: $0, now: now) })
     }
 
@@ -297,7 +283,7 @@ public enum MenuBarLabelFormatter {
     ) -> [ProviderCard] {
         let resolved = resolveProviders(
             codex: codex, claude: claude, filter: filter,
-            order: order, labels: [:], kindOrders: kindOrders)
+            order: order, kindOrders: kindOrders)
         return resolved.map { item in
             card(for: item, now: now)
         }
@@ -339,7 +325,7 @@ public enum MenuBarLabelFormatter {
     }
 
     private static func icon(for item: ResolvedProvider, now: Date) -> MenuBarIcon {
-        let prefix = resolvedPrefixTitle(provider: item.provider, custom: item.label)
+        let prefix = providerDisplayName(item.provider)
 
         if item.freshness == .authenticationRequired {
             return MenuBarIcon(
@@ -432,12 +418,6 @@ public enum MenuBarLabelFormatter {
         case .fresh, .unavailable:
             break
         }
-    }
-
-    /// 2行のラベル列用。既存 `resolvedPrefix` は末尾に空白を付けるため、それを除いた形で解決する。
-    private static func resolvedPrefixTitle(provider: ProviderID, custom: String) -> String {
-        let prefix = resolvedPrefix(provider: provider, custom: custom)
-        return String(prefix.dropLast())   // resolvedPrefix は末尾に " " を付けて返す
     }
 
     /// 2行表示の上段（枠名）を解決する。衝突回避のため配列で受けて配列で返す。
