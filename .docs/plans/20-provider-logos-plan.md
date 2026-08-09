@@ -179,7 +179,7 @@ public struct MenuBarColumns: Sendable, Equatable {
 - `MenuBarColumn` の doc コメント（「title に入りうる値: …プロバイダーラベル…」）から旧記述を落とす
 - `MenuBarColumnsView` はグループ先頭に `ProviderLogoView(provider: group.provider)` を2行ぶち抜き縦センターで置く（`HStack` 内で `frame(height: 16)` 目安）
 - spike の `measureMenuBarColumns` は labelColumn タプルを削除し、ロゴ相当を `Image(systemName: "terminal").frame(height: 16)` のプレースホルダーで模擬して高さ計測の忠実性を保つ（`("CL", " ")` / `("CX", " ")` タプルを全削除）
-- `resolvedPrefix` / `resolvedPrefixTitle` はこの時点で参照ゼロになるため削除する
+- `columnGroup` から `resolvedPrefixTitle` の参照を外す。Compact 経路が Task 4 まで参照するため、helper 本体は残す
 
 - [ ] **Step 1: MenuBarColumns 系テストを新構造へ書き換え、失敗を確認**（labelColumn への言明 → `groups[i].provider` への言明。`accessibilityText` は「Codex 5h 34 …」形式へ期待値変更）
 - [ ] **Step 2: Core を実装し `swift test --filter 'MenuBarColumns'` PASS を確認**
@@ -200,7 +200,7 @@ public struct MenuBarColumns: Sendable, Equatable {
 - `MenuBarIcon.accessibilityText` の内容が `"Codex 週間枠 34%"` / `"Claude 要認証"` 形式になる（構造は不変）
 
 - [ ] **Step 1: MenuBarIcons 系テストの期待値を providerDisplayName 形式へ書き換え、失敗を確認**
-- [ ] **Step 2: `icon(for:now:)` の `prefix` を `providerDisplayName(item.provider)` へ置き換え、`labels` 経路を削除して PASS を確認**（`resolveProviders` の `label` プロパティと `labels` パラメータはここで全削除する）
+- [ ] **Step 2: `icon(for:now:)` の `prefix` を `providerDisplayName(item.provider)` へ置き換え、`labels` 経路を削除して PASS を確認**（`resolveProviders` の `label` プロパティと `labels` パラメータ、および参照ゼロになった `resolvedPrefix` / `resolvedPrefixTitle` はここで全削除する）
 - [ ] **Step 3: プレビュー文字列を更新し `swift build` 成功を確認**
 - [ ] **Step 4: `swift test` で failure が既知1件のみを確認し、コミット** `feat: ゲージ表示の読み上げをプロバイダ名へ統一`
 

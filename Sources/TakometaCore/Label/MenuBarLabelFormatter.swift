@@ -253,22 +253,21 @@ public enum MenuBarLabelFormatter {
         now: Date,
         mode: DisplayMode,
         order: [ProviderID] = [.codex, .claude],
-        labels: [ProviderID: String] = [:],
         kindOrders: [ProviderID: [WindowKindCategory]] = [:]
     ) -> MenuBarColumns {
         let resolved = resolveProviders(
             codex: codex, claude: claude, filter: filter,
-            order: order, labels: labels, kindOrders: kindOrders)
+            order: order, labels: [:], kindOrders: kindOrders)
 
         let groups = resolved.map { item in
-            columnGroup(
+            MenuBarColumns.Group(
                 provider: item.provider,
-                windows: item.windows,
-                freshness: item.freshness,
-                now: now,
-                mode: mode,
-                customPrefix: item.label,
-                kindOrder: item.kindOrder)
+                columns: columnGroup(
+                    windows: item.windows,
+                    freshness: item.freshness,
+                    now: now,
+                    mode: mode,
+                    kindOrder: item.kindOrder))
         }
         return MenuBarColumns(groups: groups)
     }
@@ -382,27 +381,21 @@ public enum MenuBarLabelFormatter {
     }
 
     private static func columnGroup(
-        provider: ProviderID,
         windows: [RateLimitWindow],
         freshness: Freshness,
         now: Date,
         mode: DisplayMode,
-        customPrefix: String,
         kindOrder: [WindowKindCategory]
     ) -> [MenuBarColumn] {
-        let labelColumn = MenuBarColumn(
-            title: resolvedPrefixTitle(provider: provider, custom: customPrefix),
-            value: " ",
-            style: .normal)
         let dashColumn = MenuBarColumn(title: "--", value: " ", style: .normal)
 
         if freshness == .unavailable {
-            return [labelColumn, dashColumn]
+            return [dashColumn]
         }
 
         let result = select(windows: windows, mode: mode)
         guard !result.windows.isEmpty else {
-            var group = [labelColumn, dashColumn]
+            var group = [dashColumn]
             appendFreshnessColumn(freshness, to: &group)
             return group
         }
@@ -412,7 +405,7 @@ public enum MenuBarLabelFormatter {
             result.windows, order: kindOrder, category: category(of:))
         let titles = columnTitles(for: sorted.map(\.window.scope))
 
-        var group = [labelColumn]
+        var group: [MenuBarColumn] = []
         for (index, selected) in sorted.enumerated() {
             group.append(MenuBarColumn(
                 title: titles[index],

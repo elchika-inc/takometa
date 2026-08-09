@@ -18,12 +18,11 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
         claude: (windows: [RateLimitWindow], freshness: Freshness)? = nil,
         filter: DisplayFilter = DisplayFilter(),
         mode: DisplayMode = .full,
-        labels: [ProviderID: String] = [:],
         kindOrders: [ProviderID: [WindowKindCategory]] = [:]
     ) -> MenuBarColumns {
         MenuBarLabelFormatter.formatCombinedColumns(
             codex: codex, claude: claude, filter: filter,
-            now: now, mode: mode, labels: labels, kindOrders: kindOrders)
+            now: now, mode: mode, kindOrders: kindOrders)
     }
 
     private func basicSet() -> [RateLimitWindow] {
@@ -33,7 +32,7 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
         ]
     }
 
-    func testGroupStartsWithProviderLabelColumn() {
+    func testGroupCarriesProvider() {
         // claude を明示的に非表示にする。claude: nil でも resolveProviders は
         // ([], .unavailable) を入れるため、既定の filter だと "CL --" グループが生まれる
         let result = columns(
@@ -41,21 +40,15 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
             filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
 
         XCTAssertEqual(result.groups.count, 1)
-        XCTAssertEqual(result.groups[0][0].title, "CX")
-        XCTAssertEqual(result.groups[0][0].value, " ")
-    }
-
-    func testProviderLabelColumnUsesCustomLabel() {
-        let result = columns(codex: (basicSet(), .fresh), labels: [.codex: "Codex"])
-        XCTAssertEqual(result.groups[0][0].title, "Codex")
+        XCTAssertEqual(result.groups[0].provider, .codex)
     }
 
     func testWindowColumnsFollowLabelColumn() {
         let result = columns(codex: (basicSet(), .fresh))
-        let group = result.groups[0]
+        let group = result.groups[0].columns
 
-        XCTAssertEqual(group.map(\.title), ["CX", "5h", "1w"])
-        XCTAssertEqual(group.map(\.value), [" ", "34", "52"])
+        XCTAssertEqual(group.map(\.title), ["5h", "1w"])
+        XCTAssertEqual(group.map(\.value), ["34", "52"])
     }
 
     func testOverflowColumnIsAppended() {
@@ -65,7 +58,7 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
             window(id: "o", scope: .model(id: "o", displayName: "Opus"), used: 40),
         ]
         let result = columns(codex: (windows, .fresh))
-        let last = result.groups[0].last!
+        let last = result.groups[0].columns.last!
 
         XCTAssertEqual(last.title, "他")
         XCTAssertEqual(last.value, "+1")
@@ -77,30 +70,30 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
             window(id: "f", scope: .model(id: "f", displayName: "Fable"), used: 65),
             window(id: "o", scope: .model(id: "o", displayName: "Opus"), used: 40),
         ]
-        let group = columns(codex: (windows, .stale)).groups[0]
+        let group = columns(codex: (windows, .stale)).groups[0].columns
 
         XCTAssertEqual(group[group.count - 2].title, "他")
         XCTAssertEqual(group[group.count - 1].title, " ")
         XCTAssertEqual(group[group.count - 1].value, "⏱")
     }
 
-    func testUnavailableProducesLabelAndDashOnly() {
-        let group = columns(codex: ([], .unavailable)).groups[0]
+    func testUnavailableProducesDashOnly() {
+        let group = columns(codex: ([], .unavailable)).groups[0].columns
 
-        XCTAssertEqual(group.map(\.title), ["CX", "--"])
-        XCTAssertEqual(group.map(\.value), [" ", " "])
+        XCTAssertEqual(group.map(\.title), ["--"])
+        XCTAssertEqual(group.map(\.value), [" "])
     }
 
     func testEmptyWindowsWithStaleKeepsFreshnessMark() {
-        let group = columns(codex: ([], .stale)).groups[0]
+        let group = columns(codex: ([], .stale)).groups[0].columns
 
-        XCTAssertEqual(group.map(\.title), ["CX", "--", " "])
-        XCTAssertEqual(group[2].value, "⏱")
+        XCTAssertEqual(group.map(\.title), ["--", " "])
+        XCTAssertEqual(group[1].value, "⏱")
     }
 
     func testEmptyWindowsWithFreshHasNoMark() {
-        let group = columns(codex: ([], .fresh)).groups[0]
-        XCTAssertEqual(group.map(\.title), ["CX", "--"])
+        let group = columns(codex: ([], .fresh)).groups[0].columns
+        XCTAssertEqual(group.map(\.title), ["--"])
     }
 
     func testAllColumnsHaveNonEmptyTitleAndValue() {
@@ -118,7 +111,7 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
         ]
         for input in cases {
             for group in columns(codex: input).groups {
-                for column in group {
+                for column in group.columns {
                     XCTAssertFalse(column.title.isEmpty, "title が空: \(input.freshness)")
                     XCTAssertFalse(column.value.isEmpty, "value が空: \(input.freshness)")
                 }
@@ -136,7 +129,7 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
             codex: (basicSet(), .fresh), claude: (basicSet(), .fresh),
             filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
         XCTAssertEqual(result.groups.count, 1)
-        XCTAssertEqual(result.groups[0][0].title, "CX")
+        XCTAssertEqual(result.groups[0].provider, .codex)
     }
 
     func testBothHiddenProducesEmptyGroups() {
@@ -153,7 +146,7 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
         let windows = basicSet()
         let result = columns(
             codex: (windows, .fresh), kindOrders: [.codex: [.weekly, .session, .model]])
-        XCTAssertEqual(result.groups[0].map(\.title), ["CX", "1w", "5h"])
+        XCTAssertEqual(result.groups[0].columns.map(\.title), ["1w", "5h"])
     }
 
     func testCompactModeSelectsSingleWindow() {
@@ -166,8 +159,7 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
             filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)),
             mode: .compact)
 
-        // ラベル列 + 枠1つ
-        XCTAssertEqual(result.groups[0].count, 2)
+        XCTAssertEqual(result.groups[0].columns.count, 1)
     }
 
     func testBalancedKeepsSingleWindowColumnPerProvider() {
@@ -179,10 +171,10 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
             filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)),
             mode: .balanced)
 
-        // プロバイダラベル列 + 値列1つ。full なら値列が2つ以上になる
+        // 値列1つ。full なら値列が2つ以上になる
         XCTAssertEqual(result.groups.count, 1)
-        XCTAssertEqual(result.groups[0].count, 2)
-        XCTAssertEqual(result.groups[0][1].value, "65")
+        XCTAssertEqual(result.groups[0].columns.count, 1)
+        XCTAssertEqual(result.groups[0].columns[0].value, "65")
     }
 
     func testWindowKindFilterIsApplied() {
@@ -194,7 +186,7 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
                 codex: ProviderDisplayFilter(showSession: false),
                 claude: ProviderDisplayFilter(show: false)))
 
-        XCTAssertEqual(result.groups[0].map(\.title), ["CX", "1w"])
+        XCTAssertEqual(result.groups[0].columns.map(\.title), ["1w"])
     }
 
     func testStyleMatchesOneLineOutput() {
@@ -213,7 +205,7 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
         let oneLineStyles = oneLine.segments
             .filter { !$0.text.isEmpty && $0.text.allSatisfy(\.isNumber) }
             .map(\.style)
-        let twoLineStyles = twoLine.groups[0]
+        let twoLineStyles = twoLine.groups[0].columns
             .filter { !$0.value.isEmpty && $0.value.allSatisfy(\.isNumber) }
             .map(\.style)
 
@@ -236,7 +228,7 @@ final class MenuBarColumnsFormatterTests: XCTestCase {
         // 順序を捨てると並べ替えのドリフトを検出できない
         let oneLineValues = oneLine.segments
             .map(\.text).filter { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
-        let twoLineValues = twoLine.groups[0]
+        let twoLineValues = twoLine.groups[0].columns
             .map(\.value).filter { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
 
         XCTAssertEqual(oneLineValues, twoLineValues)

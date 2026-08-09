@@ -87,7 +87,6 @@ struct MenuBarLabelView: View {
             now: Date(),
             mode: settingsStore.displayMode,
             order: settingsStore.providerOrder.compactMap(ProviderID.init(rawValue:)),
-            labels: SettingsSupply.providerLabels(from: settingsStore.providers),
             kindOrders: SettingsSupply.windowKindOrders(from: settingsStore.providers))
     }
 
@@ -211,7 +210,9 @@ private struct MenuBarColumnsView: View {
                         .opacity(0.25)
                 }
                 HStack(spacing: MenuBarColumnsMetrics.columnSpacing) {
-                    ForEach(Array(group.enumerated()), id: \.offset) { _, column in
+                    ProviderLogoView(provider: group.provider)
+                        .frame(width: 16, height: 16)
+                    ForEach(Array(group.columns.enumerated()), id: \.offset) { _, column in
                         // 各行の高さをフォントサイズちょうどへ詰める。SwiftUI の Text は
                         // フォントサイズに対して余分な行高を持つため、詰めないと文字を
                         // 大きくできない（MenuBarColumnsMetrics のコメント参照）
