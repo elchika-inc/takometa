@@ -1,10 +1,49 @@
 import XCTest
 @testable import TakometaCore
 
+extension MenuBarLabel {
+    var text: String { accessibilityText }
+    var segments: [LabelSegment] { groups.flatMap(\.segments) }
+}
+
 final class ProviderDisplayNameTests: XCTestCase {
     func testDisplayNames() {
         XCTAssertEqual(providerDisplayName(.codex), "Codex")
         XCTAssertEqual(providerDisplayName(.claude), "Claude")
+    }
+}
+
+final class MenuBarLabelGroupTests: XCTestCase {
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    private func sessionWindow(percent: Double) -> RateLimitWindow {
+        RateLimitWindow(
+            id: "session", label: "5h", scope: .session,
+            usedPercent: percent, resetsAt: now.addingTimeInterval(3600), kind: .session)
+    }
+
+    func testCombinedGroupsCarryProviderAndNoPrefixSegments() {
+        let label = MenuBarLabelFormatter.formatCombined(
+            codex: (windows: [sessionWindow(percent: 34)], freshness: .fresh),
+            claude: (windows: [sessionWindow(percent: 16)], freshness: .fresh),
+            filter: DisplayFilter(), now: now, mode: .full)
+
+        XCTAssertEqual(label.groups.map(\.provider), [.codex, .claude])
+        for group in label.groups {
+            XCTAssertFalse(group.segments.contains {
+                $0.text.contains("CX") || $0.text.contains("CL")
+            })
+        }
+    }
+
+    func testAccessibilityTextIncludesProviderNamesForValueAndUnavailable() {
+        let label = MenuBarLabelFormatter.formatCombined(
+            codex: (windows: [], freshness: .unavailable),
+            claude: (windows: [sessionWindow(percent: 16)], freshness: .fresh),
+            filter: DisplayFilter(), now: now, mode: .full)
+
+        XCTAssertTrue(label.accessibilityText.contains("Codex --"))
+        XCTAssertTrue(label.accessibilityText.contains("Claude"))
     }
 }
 
@@ -28,13 +67,14 @@ final class MenuBarLabelFormatterTests: XCTestCase {
         provider: ProviderID = .codex,
         freshness: Freshness = .fresh,
         mode: DisplayMode = .full,
-        customPrefix: String = "",
         kindOrder: [WindowKindCategory] = WindowKindCategory.defaultOrder
     ) -> MenuBarLabel {
-        MenuBarLabelFormatter.format(
-            provider: provider, windows: windows,
-            freshness: freshness, now: now, mode: mode,
-            customPrefix: customPrefix, kindOrder: kindOrder)
+        MenuBarLabel(groups: [.init(
+            provider: provider,
+            segments: MenuBarLabelFormatter.format(
+                provider: provider, windows: windows,
+                freshness: freshness, now: now, mode: mode,
+                kindOrder: kindOrder))])
     }
 
     private func fullSet() -> [RateLimitWindow] {
@@ -57,19 +97,19 @@ final class MenuBarLabelFormatterTests: XCTestCase {
     }
 
     func testDefaultKindOrderOmitsBasicMarkers() {
-        XCTAssertEqual(format(fullSet()).text, "CX 34|52|G78|F65")
+        XCTAssertEqual(format(fullSet()).text, "Codex 34|52|G78|F65")
     }
 
     func testSwappedSessionAndWeeklyRestoresMarkers() {
         XCTAssertEqual(
             format(fullSet(), kindOrder: [.weekly, .session, .model]).text,
-            "CX W52|H34|G78|F65")
+            "Codex W52|H34|G78|F65")
     }
 
     func testModelBetweenBasicsRestoresMarkers() {
         XCTAssertEqual(
             format(fullSet(), kindOrder: [.session, .model, .weekly]).text,
-            "CX H34|G78|F65|W52")
+            "Codex H34|G78|F65|W52")
     }
 
     func testModelFirstRestoresMarkersAndKeepsAbbreviations() {
@@ -77,19 +117,19 @@ final class MenuBarLabelFormatterTests: XCTestCase {
         // resolveAbbreviations を並べ替え前に呼ぶ実装では G/F が脱落する）
         XCTAssertEqual(
             format(fullSet(), kindOrder: [.model, .session, .weekly]).text,
-            "CX G78|F65|H34|W52")
+            "Codex G78|F65|H34|W52")
     }
 
     func testWeeklyModelSessionRestoresMarkers() {
         XCTAssertEqual(
             format(fullSet(), kindOrder: [.weekly, .model, .session]).text,
-            "CX W52|G78|F65|H34")
+            "Codex W52|G78|F65|H34")
     }
 
     func testModelWeeklySessionRestoresMarkers() {
         XCTAssertEqual(
             format(fullSet(), kindOrder: [.model, .weekly, .session]).text,
-            "CX G78|F65|W52|H34")
+            "Codex G78|F65|W52|H34")
     }
 
     func testBasicsOnlyKeepsOmissionWhenSortedOrderMatchesDefault() {
@@ -97,17 +137,17 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             window(id: "session", scope: .session, used: 34, kind: .session),
             window(id: "weekly", scope: .weeklyAll, used: 52),
         ]
-        XCTAssertEqual(format(windows, kindOrder: [.session, .model, .weekly]).text, "CX 34|52")
+        XCTAssertEqual(format(windows, kindOrder: [.session, .model, .weekly]).text, "Codex 34|52")
     }
 
     func testSessionOnlyKeepsMarkerRegardlessOfKindOrder() {
         let windows = [window(id: "session", scope: .session, used: 34, kind: .session)]
-        XCTAssertEqual(format(windows, kindOrder: [.model, .weekly, .session]).text, "CX H34")
+        XCTAssertEqual(format(windows, kindOrder: [.model, .weekly, .session]).text, "Codex H34")
     }
 
     func testWeeklyOnlyKeepsMarkerRegardlessOfKindOrder() {
         let windows = [window(id: "weekly", scope: .weeklyAll, used: 52)]
-        XCTAssertEqual(format(windows, kindOrder: [.model, .session, .weekly]).text, "CX W52")
+        XCTAssertEqual(format(windows, kindOrder: [.model, .session, .weekly]).text, "Codex W52")
     }
 
     func testWindowSetAndOverflowAreInvariantAcrossKindOrders() {
@@ -176,123 +216,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
         let claudePart = format(fullSet(), provider: .claude).text
         XCTAssertEqual(combined.text, "\(codexPart)  \(claudePart)")
         // claude 側が既定順であることを明示的に確認（マーカー無し＝並べ替えられていない）
-        XCTAssertTrue(combined.text.hasSuffix("CL 34|52|G78|F65"))
-    }
-
-    private func weekly52() -> [RateLimitWindow] {
-        [window(id: "weekly", scope: .weeklyAll, used: 52)]
-    }
-
-    func testCustomPrefixReplacesDefault() {
-        XCTAssertEqual(format(weekly52(), customPrefix: "Codex").text, "Codex W52")
-    }
-
-    func testEmptyCustomPrefixFallsBackToProviderDefault() {
-        XCTAssertEqual(format(weekly52(), provider: .codex).text, "CX W52")
-        XCTAssertEqual(format(weekly52(), provider: .claude).text, "CL W52")
-    }
-
-    func testFormatWithoutCustomPrefixKeepsBackwardCompatibleDefault() {
-        let label = MenuBarLabelFormatter.format(
-            provider: .codex,
-            windows: weekly52(),
-            freshness: .fresh,
-            now: now,
-            mode: .full)
-
-        XCTAssertEqual(label.text, "CX W52")
-    }
-
-    func testCustomPrefixExactlySixIsNotClamped() {
-        XCTAssertEqual(format(weekly52(), customPrefix: "ABCDEF").text, "ABCDEF W52")
-    }
-
-    func testCustomPrefixOverSixIsClamped() {
-        XCTAssertEqual(format(weekly52(), customPrefix: "ABCDEFG").text, "ABCDEF W52")
-    }
-
-    func testCustomPrefixClampsAtSixExtendedGraphemeClusters() {
-        let cluster = "🇯🇵"
-        let sixClusters = String(repeating: cluster, count: 6)
-        let sevenClusters = String(repeating: cluster, count: 7)
-
-        XCTAssertEqual(
-            format(weekly52(), customPrefix: sixClusters).text,
-            "\(sixClusters) W52")
-        XCTAssertEqual(
-            format(weekly52(), customPrefix: sevenClusters).text,
-            "\(sixClusters) W52")
-    }
-
-    func testCustomPrefixStripsControlAndNewline() {
-        XCTAssertEqual(format(weekly52(), customPrefix: "A\u{202E}B\nC").text, "ABC W52")
-    }
-
-    func testCustomPrefixRemovesNullZeroWidthAndUnicodeLineSeparator() {
-        XCTAssertEqual(
-            format(
-                weekly52(),
-                customPrefix: "A\u{0000}B\u{200B}C\u{2028}D"
-            ).text,
-            "ABCD W52")
-    }
-
-    func testCustomPrefixKeepsEmoji() {
-        XCTAssertEqual(format(weekly52(), customPrefix: "🐙").text, "🐙 W52")
-    }
-
-    func testCustomPrefixAppliesWhenUnavailable() {
-        let label = MenuBarLabelFormatter.format(
-            provider: .codex, windows: [], freshness: .unavailable,
-            now: now, mode: .full, customPrefix: "Codex")
-        XCTAssertEqual(label.text, "Codex --")
-    }
-
-    func testCustomPrefixAppliesWhenFreshWithEmptyWindows() {
-        let label = MenuBarLabelFormatter.format(
-            provider: .codex,
-            windows: [],
-            freshness: .fresh,
-            now: now,
-            mode: .full,
-            customPrefix: "Codex")
-
-        XCTAssertEqual(label.text, "Codex --")
-    }
-
-    func testFormatCombinedAppliesLabelsPerProvider() {
-        let label = MenuBarLabelFormatter.formatCombined(
-            codex: ([window(id: "w", scope: .weeklyAll, used: 52)], .fresh),
-            claude: ([window(id: "w", scope: .weeklyAll, used: 30)], .fresh),
-            filter: DisplayFilter(),
-            now: now, mode: .full,
-            order: [.codex, .claude],
-            labels: [.codex: "GPT", .claude: "🐙"])
-        XCTAssertEqual(label.text, "GPT W52  🐙 W30")
-    }
-
-    func testFormatCombinedFallsBackForUnsetProvider() {
-        let label = MenuBarLabelFormatter.formatCombined(
-            codex: ([window(id: "w", scope: .weeklyAll, used: 52)], .fresh),
-            claude: ([window(id: "w", scope: .weeklyAll, used: 30)], .fresh),
-            filter: DisplayFilter(),
-            now: now, mode: .full,
-            order: [.codex, .claude],
-            labels: [.codex: "GPT"])
-        XCTAssertEqual(label.text, "GPT W52  CL W30")
-    }
-
-    func testFormatCombinedAppliesCustomLabelsInReversedProviderOrder() {
-        let label = MenuBarLabelFormatter.formatCombined(
-            codex: ([window(id: "codex", scope: .weeklyAll, used: 52)], .fresh),
-            claude: ([window(id: "claude", scope: .weeklyAll, used: 30)], .fresh),
-            filter: DisplayFilter(),
-            now: now,
-            mode: .full,
-            order: [.claude, .codex],
-            labels: [.codex: "GPT", .claude: "Anth"])
-
-        XCTAssertEqual(label.text, "Anth W30  GPT W52")
+        XCTAssertTrue(combined.text.hasSuffix("Claude 34|52|G78|F65"))
     }
 
     private func formatCombined(
@@ -315,7 +239,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             window(id: "weekly", scope: .weeklyAll, used: 52),
             window(id: "spark", scope: .model(id: "spark", displayName: "GPT-5.3-Codex-Spark"), used: 78),
         ])
-        XCTAssertEqual(label.text, "CX 34|52|G78")
+        XCTAssertEqual(label.text, "Codex 34|52|G78")
     }
 
     func testFullWithOneBasicTwoModelsAndOverflow() {
@@ -325,7 +249,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             window(id: "f", scope: .model(id: "f", displayName: "Fable"), used: 65),
             window(id: "o", scope: .model(id: "o", displayName: "Opus"), used: 40),
         ])
-        XCTAssertEqual(label.text, "CX W52|G78|F65 +1")
+        XCTAssertEqual(label.text, "Codex W52|G78|F65 +1")
     }
 
     func testAbbreviationCollisionExtendsPrefix() {
@@ -333,7 +257,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             window(id: "fable", scope: .model(id: "1", displayName: "Fable"), used: 78),
             window(id: "flash", scope: .model(id: "2", displayName: "Flash"), used: 65),
         ])
-        XCTAssertEqual(label.text, "CX Fa78|Fl65")
+        XCTAssertEqual(label.text, "Codex Fa78|Fl65")
     }
 
     func testSameDisplayNameKeepsSameAbbreviation() {
@@ -341,7 +265,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             window(id: "spark-a", scope: .model(id: "spark", displayName: "GPT"), used: 78),
             window(id: "spark-b", scope: .model(id: "spark", displayName: "GPT"), used: 65),
         ])
-        XCTAssertEqual(label.text, "CX G78|G65")
+        XCTAssertEqual(label.text, "Codex G78|G65")
     }
 
     func testLegacyBalancedInputRendersAsFullAfterMigration() {
@@ -352,7 +276,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             window(id: "f", scope: .model(id: "f", displayName: "Fable"), used: 65),
             window(id: "o", scope: .model(id: "o", displayName: "Opus"), used: 40),
         ], mode: .full)
-        XCTAssertEqual(label.text, "CX 34|52|G78|F65 +1")
+        XCTAssertEqual(label.text, "Codex 34|52|G78|F65 +1")
     }
 
     func testBalancedShowsMostConstrainedBasicWithKindPrefix() {
@@ -360,14 +284,14 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             window(id: "session", scope: .session, used: 34, kind: .session),
             window(id: "weekly", scope: .weeklyAll, used: 65),
         ], provider: .claude, mode: .balanced)
-        XCTAssertEqual(label.text, "CL W65")
+        XCTAssertEqual(label.text, "Claude W65")
     }
 
     func testCriticalStylesOnlyValueSegment() {
         let label = format([
             window(id: "session", scope: .session, used: 100, kind: .session),
         ], mode: .compact)
-        XCTAssertEqual(label.text, "CX H100")
+        XCTAssertEqual(label.text, "Codex H100")
         XCTAssertEqual(label.segments.first { $0.text == "100" }?.style, .critical)
         XCTAssertEqual(label.segments.first { $0.text == "H" }?.style, .normal)
     }
@@ -376,7 +300,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
         let label = format([
             window(id: "session", scope: .session, used: 100, kind: .session, resetsIn: -60),
         ], freshness: .stale, mode: .compact)
-        XCTAssertEqual(label.text, "CX H100 ⏱")
+        XCTAssertEqual(label.text, "Codex H100 ⏱")
         XCTAssertEqual(label.segments.first { $0.text == "100" }?.style, .normal)
     }
 
@@ -384,7 +308,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
         let label = format([
             window(id: "session", scope: .session, used: 90, kind: .session),
         ], mode: .compact)
-        XCTAssertEqual(label.text, "CX H90")
+        XCTAssertEqual(label.text, "Codex H90")
         XCTAssertEqual(label.segments.first { $0.text == "90" }?.style, .warning)
     }
 
@@ -392,21 +316,21 @@ final class MenuBarLabelFormatterTests: XCTestCase {
         let withValues = format([
             window(id: "session", scope: .session, used: 41, kind: .session),
         ], provider: .claude, freshness: .authenticationRequired)
-        XCTAssertEqual(withValues.text, "CL H41 🔒")
+        XCTAssertEqual(withValues.text, "Claude H41 🔒")
 
         let empty = format([], provider: .claude, freshness: .authenticationRequired)
-        XCTAssertEqual(empty.text, "CL -- 🔒")
+        XCTAssertEqual(empty.text, "Claude -- 🔒")
     }
 
     func testUnavailableShowsPlaceholder() {
-        XCTAssertEqual(format([], freshness: .unavailable).text, "CX --")
+        XCTAssertEqual(format([], freshness: .unavailable).text, "Codex --")
     }
 
     func testUsedPercentIsFloored() {
         let label = format([
             window(id: "session", scope: .session, used: 99.9, kind: .session, resetsIn: nil),
         ], mode: .compact)
-        XCTAssertEqual(label.text, "CX H99")
+        XCTAssertEqual(label.text, "Codex H99")
         XCTAssertEqual(label.segments.first { $0.text == "99" }?.style, .normal)
     }
 
@@ -416,14 +340,14 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             window(id: "b", scope: .model(id: "b", displayName: "B"), used: 50),
             window(id: "a", scope: .model(id: "a", displayName: "A"), used: 50),
         ])
-        XCTAssertEqual(label.text, "CX A50|B50 +1")
+        XCTAssertEqual(label.text, "Codex A50|B50 +1")
     }
 
     func testOtherScopeUsesRawValueForAbbreviation() {
         let label = format([
             window(id: "other", scope: .other("mystery"), used: 42, kind: nil),
         ])
-        XCTAssertEqual(label.text, "CX M42")
+        XCTAssertEqual(label.text, "Codex M42")
     }
 
     func testCombinedOrdersCodexBeforeClaudeWithTwoSpaceSeparatorAndStaleMarks() {
@@ -435,8 +359,8 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 window(id: "claude-weekly", scope: .weeklyAll, used: 30),
             ], freshness: .stale))
 
-        XCTAssertEqual(label.text, "CX W57 ⏱  CL W30 ⏱")
-        XCTAssertEqual(label.segments.first { $0.text == "  " }?.style, .normal)
+        XCTAssertEqual(label.text, "Codex W57 ⏱  Claude W30 ⏱")
+        XCTAssertEqual(label.groups.count, 2)
     }
 
     func testCombinedExcludesCodexWhenProviderIsOff() {
@@ -449,7 +373,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             ], freshness: .fresh),
             filter: DisplayFilter(codex: ProviderDisplayFilter(show: false)))
 
-        XCTAssertEqual(label.text, "CL W30")
+        XCTAssertEqual(label.text, "Claude W30")
     }
 
     func testCombinedExcludesClaudeWhenProviderIsOff() {
@@ -462,7 +386,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             ], freshness: .fresh),
             filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
 
-        XCTAssertEqual(label.text, "CX W57")
+        XCTAssertEqual(label.text, "Codex W57")
     }
 
     func testCombinedReturnsEmptyLabelOnlyWhenBothProvidersAreOff() {
@@ -486,19 +410,19 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .full).text,
-            "CX W52|G78|F65 +1")
+            "Codex W52|G78|F65 +1")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .balanced).text,
-            "CX G78")
+            "Codex G78")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .compact).text,
-            "CX G78")
+            "Codex G78")
     }
 
     func testCombinedWeeklyFilterRunsBeforeEveryDisplayMode() {
@@ -512,19 +436,19 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .full).text,
-            "CX H34|G78|F65 +1")
+            "Codex H34|G78|F65 +1")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .balanced).text,
-            "CX G78")
+            "Codex G78")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .compact).text,
-            "CX G78")
+            "Codex G78")
     }
 
     func testCombinedModelFilterRunsBeforeEveryDisplayMode() {
@@ -538,19 +462,19 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .full).text,
-            "CX 34|52")
+            "Codex 34|52")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .balanced).text,
-            "CX W52")
+            "Codex W52")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: windows, freshness: .fresh),
                 filter: filter,
                 mode: .compact).text,
-            "CX W52")
+            "Codex W52")
     }
 
     func testCombinedClassifiesNilKindSessionByScope() {
@@ -562,7 +486,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 codex: ProviderDisplayFilter(showSession: false),
                 claude: ProviderDisplayFilter(show: false)))
 
-        XCTAssertEqual(label.text, "CX --")
+        XCTAssertEqual(label.text, "Codex --")
     }
 
     func testCombinedClassifiesOtherScopeAsModelFilter() {
@@ -578,14 +502,14 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 filter: DisplayFilter(
                     codex: ProviderDisplayFilter(showModel: false),
                     claude: ProviderDisplayFilter(show: false))).text,
-            "CX --")
+            "Codex --")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: [other], freshness: .fresh),
                 filter: DisplayFilter(
                     codex: ProviderDisplayFilter(showModel: true),
                     claude: ProviderDisplayFilter(show: false))).text,
-            "CX M45")
+            "Codex M45")
     }
 
     func testCombinedUsesModelScopeWhenKindSaysWeekly() {
@@ -601,14 +525,14 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 filter: DisplayFilter(
                     codex: ProviderDisplayFilter(showWeekly: false),
                     claude: ProviderDisplayFilter(show: false))).text,
-            "CX M45")
+            "Codex M45")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: [mismatched], freshness: .fresh),
                 filter: DisplayFilter(
                     codex: ProviderDisplayFilter(showModel: false),
                     claude: ProviderDisplayFilter(show: false))).text,
-            "CX --")
+            "Codex --")
     }
 
     func testCombinedFilteredEmptyPreservesFreshnessMarkRules() {
@@ -621,12 +545,12 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             formatCombined(
                 codex: (windows: weekly, freshness: .fresh),
                 filter: filter).text,
-            "CX --")
+            "Codex --")
         XCTAssertEqual(
             formatCombined(
                 codex: (windows: weekly, freshness: .stale),
                 filter: filter).text,
-            "CX -- ⏱")
+            "Codex -- ⏱")
     }
 
     func testCombinedNilSnapshotProducesPlaceholderInsteadOfOmittingProvider() {
@@ -636,7 +560,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                 window(id: "weekly", scope: .weeklyAll, used: 30),
             ], freshness: .fresh))
 
-        XCTAssertEqual(label.text, "CX --  CL W30")
+        XCTAssertEqual(label.text, "Codex --  Claude W30")
     }
 
     func testCombinedKeepsAbbreviationCollisionsWithinEachProvider() {
@@ -654,7 +578,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
                     used: 65),
             ], freshness: .fresh))
 
-        XCTAssertEqual(label.text, "CX F78  CL F65")
+        XCTAssertEqual(label.text, "Codex F78  Claude F65")
     }
 
     func testCodexModelFilterDoesNotAffectClaudeModel() {
@@ -667,7 +591,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             ], freshness: .fresh),
             filter: DisplayFilter(codex: ProviderDisplayFilter(showModel: false)))
 
-        XCTAssertEqual(label.text, "CX --  CL O65")
+        XCTAssertEqual(label.text, "Codex --  Claude O65")
     }
 
     func testClaudeModelFilterDoesNotAffectCodexModel() {
@@ -680,7 +604,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             ], freshness: .fresh),
             filter: DisplayFilter(claude: ProviderDisplayFilter(showModel: false)))
 
-        XCTAssertEqual(label.text, "CX G78  CL --")
+        XCTAssertEqual(label.text, "Codex G78  Claude --")
     }
 
     func testCombinedPreservesCriticalStyleWithoutAffectingOtherProvider() {
@@ -693,7 +617,7 @@ final class MenuBarLabelFormatterTests: XCTestCase {
             ], freshness: .fresh),
             mode: .compact)
 
-        XCTAssertEqual(label.text, "CX H100  CL W50")
+        XCTAssertEqual(label.text, "Codex H100  Claude W50")
         XCTAssertEqual(label.segments.first { $0.text == "100" }?.style, .critical)
         XCTAssertEqual(label.segments.first { $0.text == "50" }?.style, .normal)
         XCTAssertEqual(label.segments.filter { $0.style == .critical }.count, 1)
@@ -714,8 +638,8 @@ extension MenuBarLabelFormatterTests {
     func testCombinedFollowsReversedProviderOrderIncludingSeparator() {
         let label = orderedCombined(order: [.claude, .codex])
 
-        XCTAssertEqual(label.text, "CL W30  CX W57")
-        XCTAssertEqual(label.segments.first { $0.text == "  " }?.style, .normal)
+        XCTAssertEqual(label.text, "Claude W30  Codex W57")
+        XCTAssertEqual(label.groups.count, 2)
     }
 
     func testCombinedExplicitDefaultOrderMatchesOmittedOrder() {
@@ -745,11 +669,11 @@ extension MenuBarLabelFormatterTests {
     func testCombinedDeduplicatesProviderOrderByFirstOccurrence() {
         XCTAssertEqual(
             orderedCombined(order: [.codex, .codex, .claude]).text,
-            "CX W57  CL W30")
+            "Codex W57  Claude W30")
     }
 
     func testCombinedOmitsProviderMissingFromOrder() {
-        XCTAssertEqual(orderedCombined(order: [.claude]).text, "CL W30")
+        XCTAssertEqual(orderedCombined(order: [.claude]).text, "Claude W30")
     }
 
     func testCombinedAppliesDisplayFilterWithinReversedOrder() {
@@ -757,7 +681,7 @@ extension MenuBarLabelFormatterTests {
             orderedCombined(
                 filter: DisplayFilter(codex: ProviderDisplayFilter(show: false)),
                 order: [.claude, .codex]).text,
-            "CL W30")
+            "Claude W30")
     }
 
     func testCombinedEmptyOrderReturnsEmptyLabel() {

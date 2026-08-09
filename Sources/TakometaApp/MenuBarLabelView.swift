@@ -45,12 +45,12 @@ struct MenuBarLabelView: View {
             }
         } else {
             let label = formattedLabel
-            if label.segments.isEmpty {
+            if label.groups.isEmpty {
                 EmptyMenuBarLabelView()
             } else {
                 Image(nsImage: renderedImage(for: MenuBarSegmentView(label: label)))
                     .renderingMode(.original)
-                    .accessibilityLabel(label.text)
+                    .accessibilityLabel(label.accessibilityText)
             }
         }
     }
@@ -64,7 +64,6 @@ struct MenuBarLabelView: View {
             now: Date(),
             mode: settingsStore.displayMode,
             order: settingsStore.providerOrder.compactMap(ProviderID.init(rawValue:)),
-            labels: SettingsSupply.providerLabels(from: settingsStore.providers),
             kindOrders: SettingsSupply.windowKindOrders(from: settingsStore.providers))
     }
 
@@ -125,10 +124,17 @@ private struct MenuBarSegmentView: View {
     let label: MenuBarLabel
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(label.segments.enumerated()), id: \.offset) { _, segment in
-                Text(segment.text)
-                    .foregroundStyle(color(for: segment.style))
+        HStack(spacing: 8) {
+            ForEach(Array(label.groups.enumerated()), id: \.offset) { _, group in
+                HStack(spacing: 0) {
+                    ProviderLogoView(provider: group.provider)
+                        .frame(width: 12, height: 12)
+                        .padding(.trailing, 3)
+                    ForEach(Array(group.segments.enumerated()), id: \.offset) { _, segment in
+                        Text(segment.text)
+                            .foregroundStyle(color(for: segment.style))
+                    }
+                }
             }
         }
         .font(.system(size: 12, weight: .medium).monospacedDigit())

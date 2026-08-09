@@ -10,7 +10,10 @@ let package = Package(
         .executableTarget(
             name: "takometa-spike",
             dependencies: ["TakometaCore", "TakometaFixtureSupport"]),
-        .executableTarget(name: "TakometaApp", dependencies: ["TakometaCore"]),
+        .executableTarget(
+            name: "TakometaApp",
+            dependencies: ["TakometaCore"],
+            resources: [.process("Resources")]),
         .executableTarget(name: "takometa", dependencies: ["TakometaCore"]),
         .testTarget(
             name: "TakometaCoreTests",
