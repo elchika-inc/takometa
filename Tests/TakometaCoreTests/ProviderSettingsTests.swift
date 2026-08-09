@@ -33,27 +33,15 @@ final class ProviderSettingsTests: XCTestCase {
         XCTAssertEqual(decoded, original)
     }
 
-    func testLabelDefaultsToEmpty() {
-        XCTAssertEqual(ProviderSettings().label, "")
-    }
-
-    func testLabelEncodesAndDecodesRoundTrip() throws {
-        let settings = ProviderSettings(label: "Codex")
-        let data = try JSONEncoder().encode(settings)
-        let decoded = try JSONDecoder().decode(ProviderSettings.self, from: data)
-        XCTAssertEqual(decoded.label, "Codex")
-    }
-
-    func testMissingLabelKeyDecodesToEmpty() throws {
+    func testDecodingIgnoresLegacyLabelKey() throws {
         let json = """
         {"show":true,"showSession":true,"showWeekly":true,"showModel":true,\
         "notificationsEnabled":false,"usageThreshold":80,"dailyEnabled":false,\
-        "dailyThreshold":20}
+        "dailyThreshold":20,"label":"MyCX"}
         """.data(using: .utf8)!
 
         let decoded = try JSONDecoder().decode(ProviderSettings.self, from: json)
-
-        XCTAssertEqual(decoded.label, "")
+        XCTAssertTrue(decoded.show)
     }
 
     func testWindowKindOrderDefaultsToDefaultOrder() {
@@ -71,7 +59,7 @@ final class ProviderSettingsTests: XCTestCase {
         let json = """
         {"show":true,"showSession":true,"showWeekly":true,"showModel":true,\
         "notificationsEnabled":false,"usageThreshold":80,"dailyEnabled":false,\
-        "dailyThreshold":20,"label":""}
+        "dailyThreshold":20}
         """.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(ProviderSettings.self, from: json)
         XCTAssertEqual(decoded.windowKindOrder, WindowKindCategory.defaultOrder)
@@ -81,7 +69,7 @@ final class ProviderSettingsTests: XCTestCase {
         let json = """
         {"show":true,"showSession":true,"showWeekly":true,"showModel":true,\
         "notificationsEnabled":false,"usageThreshold":80,"dailyEnabled":false,\
-        "dailyThreshold":20,"label":"","windowKindOrder":["future","model"]}
+        "dailyThreshold":20,"windowKindOrder":["future","model"]}
         """.data(using: .utf8)!
         let decoded = try JSONDecoder().decode(ProviderSettings.self, from: json)
         XCTAssertEqual(decoded.windowKindOrder, [.model, .session, .weekly])

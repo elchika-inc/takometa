@@ -212,11 +212,14 @@ public struct MenuBarColumns: Sendable, Equatable {
 - Modify: `Sources/TakometaApp/SettingsView.swift`（「表示ラベル」Section と `labelBinding` を削除）
 - Modify: `Sources/TakometaCore/Settings/SettingsSupply.swift`（`providerLabels` 削除)
 - Modify: `Sources/TakometaCore/Settings/ProviderSettings.swift`（`label` プロパティ・CodingKey・init 引数を削除）
+- Modify: `Sources/TakometaCore/Settings/SettingsStore.swift`（dictionary decode / encode から `label` を削除。既存の未知キーは保持）
 - Test: `Tests/TakometaCoreTests/SettingsSupplyTests.swift` / `ProviderSettingsTests.swift` / `SettingsMigrationTests.swift`（追随）
 
 **Interfaces:**
 - Consumes: なし（削除のみ）
 - Produces: `ProviderSettings` から `label` が消える。**永続化済みの `label` キーは `decodeIfPresent` ベースのため無視されてエラーにならないこと**をテストで固定する
+
+実装上の注意: `SettingsStoreTests` の `label` 自体を検証するテストは削除する。欠落時の既定値や型不一致耐性を検証するテストは、`usageThreshold` など存続するフィールドへ置き換えて残す。
 
 - [ ] **Step 1: 「旧 label キーを含む JSON をデコードしてもエラーにならない」テストを追加**
 

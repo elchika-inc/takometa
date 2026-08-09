@@ -7,7 +7,6 @@ public struct ProviderSettings: Sendable, Equatable, Codable {
     public var usageThreshold: Double
     public var dailyEnabled: Bool
     public var dailyThreshold: Double
-    public var label: String
     public var windowKindOrder: [WindowKindCategory]
 
     private enum CodingKeys: String, CodingKey {
@@ -19,7 +18,6 @@ public struct ProviderSettings: Sendable, Equatable, Codable {
         case usageThreshold
         case dailyEnabled
         case dailyThreshold
-        case label
         case windowKindOrder
     }
 
@@ -32,7 +30,6 @@ public struct ProviderSettings: Sendable, Equatable, Codable {
         usageThreshold: Double = NotificationSettings().usageThreshold,
         dailyEnabled: Bool = NotificationSettings().dailyEnabled,
         dailyThreshold: Double = NotificationSettings().dailyThreshold,
-        label: String = "",
         windowKindOrder: [WindowKindCategory] = WindowKindCategory.defaultOrder
     ) {
         self.show = show
@@ -43,7 +40,6 @@ public struct ProviderSettings: Sendable, Equatable, Codable {
         self.usageThreshold = usageThreshold
         self.dailyEnabled = dailyEnabled
         self.dailyThreshold = dailyThreshold
-        self.label = label
         self.windowKindOrder = windowKindOrder
     }
 
@@ -57,7 +53,6 @@ public struct ProviderSettings: Sendable, Equatable, Codable {
         usageThreshold = try container.decode(Double.self, forKey: .usageThreshold)
         dailyEnabled = try container.decode(Bool.self, forKey: .dailyEnabled)
         dailyThreshold = try container.decode(Double.self, forKey: .dailyThreshold)
-        label = try container.decodeIfPresent(String.self, forKey: .label) ?? ""
         windowKindOrder = WindowKindCategory.normalizedOrder(
             try container.decodeIfPresent([String].self, forKey: .windowKindOrder) ?? [])
     }

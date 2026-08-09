@@ -167,14 +167,6 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section("表示ラベル") {
-                TextField(
-                    provider == .codex ? "CX" : "CL",
-                    text: labelBinding(for: provider))
-                Text("空欄で既定（\(provider == .codex ? "CX" : "CL")）に戻ります")
-                    .foregroundStyle(.secondary)
-            }
-
             Section("通知") {
                 Toggle(
                     "通知を有効にする",
@@ -238,16 +230,6 @@ struct SettingsView: View {
             set: { value in
                 settingsStore.update(provider: provider.rawValue) {
                     $0[keyPath: keyPath] = value
-                }
-            })
-    }
-
-    private func labelBinding(for provider: ProviderID) -> Binding<String> {
-        Binding(
-            get: { providerSettings(for: provider).label },
-            set: { newValue in
-                settingsStore.update(provider: provider.rawValue) {
-                    $0.label = String(newValue.prefix(6))
                 }
             })
     }

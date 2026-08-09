@@ -119,34 +119,7 @@ final class SettingsStoreTests: XCTestCase {
         }
     }
 
-    func testLabelRoundTrips() throws {
-        try withTemporaryDirectory { directory in
-            let store = try makeStore(directory: directory)
-            store.update(provider: "codex") { $0.label = "Codex" }
-
-            let reloaded = try makeStore(directory: directory)
-            XCTAssertEqual(reloaded.providers["codex"]?.label, "Codex")
-        }
-    }
-
-    func testRawLabelRoundTripsWithoutNormalizationInMemoryAndFile() throws {
-        try withTemporaryDirectory { directory in
-            let rawLabel = "  1234567\u{0000}\u{200B}\u{2028}  "
-            let store = try makeStore(directory: directory)
-
-            store.update(provider: "codex") { $0.label = rawLabel }
-
-            let reloaded = try makeStore(directory: directory)
-            XCTAssertEqual(reloaded.providers["codex"]?.label, rawLabel)
-
-            let saved = try jsonObject(in: directory)
-            let providers = try XCTUnwrap(saved["providers"] as? [String: Any])
-            let codex = try XCTUnwrap(providers["codex"] as? [String: Any])
-            XCTAssertEqual(codex["label"] as? String, rawLabel)
-        }
-    }
-
-    func testMissingLabelDefaultsToEmptyAndKeepsOtherFields() throws {
+    func testMissingUsageThresholdDefaultsAndKeepsOtherFields() throws {
         try withTemporaryDirectory { directory in
             try writeJSON("""
             {
@@ -161,12 +134,12 @@ final class SettingsStoreTests: XCTestCase {
             """, in: directory)
 
             let store = try makeStore(directory: directory)
-            XCTAssertEqual(store.providers["codex"]?.label, "")
+            XCTAssertEqual(store.providers["codex"]?.usageThreshold, 80)
             XCTAssertEqual(store.providers["codex"]?.show, false)
         }
     }
 
-    func testNonStringLabelFallsBackToEmpty() throws {
+    func testNonNumericUsageThresholdFallsBackToDefault() throws {
         try withTemporaryDirectory { directory in
             try writeJSON("""
             {
@@ -174,14 +147,14 @@ final class SettingsStoreTests: XCTestCase {
               "displayMode": "full",
               "providerOrder": ["codex", "claude"],
               "providers": {
-                "codex": { "label": 123 },
+                "codex": { "usageThreshold": "abc" },
                 "claude": {}
               }
             }
             """, in: directory)
 
             let store = try makeStore(directory: directory)
-            XCTAssertEqual(store.providers["codex"]?.label, "")
+            XCTAssertEqual(store.providers["codex"]?.usageThreshold, 80)
         }
     }
 

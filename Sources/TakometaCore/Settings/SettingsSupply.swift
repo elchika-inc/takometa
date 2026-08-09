@@ -23,15 +23,6 @@ public enum SettingsSupply {
                 from: providers[ProviderID.claude.rawValue] ?? ProviderSettings()))
     }
 
-    public static func providerLabels(
-        from providers: [String: ProviderSettings]
-    ) -> [ProviderID: String] {
-        providers.reduce(into: [:]) { result, entry in
-            guard let provider = ProviderID(rawValue: entry.key) else { return }
-            result[provider] = entry.value.label
-        }
-    }
-
     public static func windowKindOrders(
         from providers: [String: ProviderSettings]
     ) -> [ProviderID: [WindowKindCategory]] {

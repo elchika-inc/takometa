@@ -248,7 +248,6 @@ public final class SettingsStore {
             usageThreshold: double(from: object["usageThreshold"]) ?? defaults.usageThreshold,
             dailyEnabled: bool(from: object["dailyEnabled"]) ?? defaults.dailyEnabled,
             dailyThreshold: double(from: object["dailyThreshold"]) ?? defaults.dailyThreshold,
-            label: string(from: object["label"]) ?? defaults.label,
             windowKindOrder: WindowKindCategory.normalizedOrder(
                 stringArray(from: object["windowKindOrder"])))
     }
@@ -265,7 +264,6 @@ public final class SettingsStore {
         object["usageThreshold"] = settings.usageThreshold
         object["dailyEnabled"] = settings.dailyEnabled
         object["dailyThreshold"] = settings.dailyThreshold
-        object["label"] = settings.label
         object["windowKindOrder"] = settings.windowKindOrder.map(\.rawValue)
     }
 
