@@ -7,28 +7,35 @@ final class MenuBarColumnsTests: XCTestCase {
     }
 
     func testAccessibilityTextJoinsTitleAndValue() {
-        let columns = MenuBarColumns(groups: [[col("5h", "34"), col("1w", "52")]])
-        XCTAssertEqual(columns.accessibilityText, "5h 34 1w 52")
+        let columns = MenuBarColumns(groups: [
+            .init(provider: .codex, columns: [col("5h", "34"), col("1w", "52")])
+        ])
+        XCTAssertEqual(columns.groups.map(\.provider), [.codex])
+        XCTAssertEqual(columns.accessibilityText, "Codex 5h 34 1w 52")
     }
 
     func testAccessibilityTextOmitsValueWhenBlank() {
-        // ラベル列と "--" 列は value が空白1文字。title のみを出す
-        let columns = MenuBarColumns(groups: [[col("CX", " "), col("--", " ")]])
-        XCTAssertEqual(columns.accessibilityText, "CX --")
+        let columns = MenuBarColumns(groups: [
+            .init(provider: .codex, columns: [col("--", " ")])
+        ])
+        XCTAssertEqual(columns.accessibilityText, "Codex --")
     }
 
     func testAccessibilityTextIncludesFreshnessMark() {
         // マーク列は title が空白1文字なので value のみが出る
-        let columns = MenuBarColumns(groups: [[col("CX", " "), col("1w", "52"), col(" ", "⏱")]])
-        XCTAssertEqual(columns.accessibilityText, "CX 1w 52 ⏱")
+        let columns = MenuBarColumns(groups: [
+            .init(provider: .codex, columns: [col("1w", "52"), col(" ", "⏱")])
+        ])
+        XCTAssertEqual(columns.accessibilityText, "Codex 1w 52 ⏱")
     }
 
     func testAccessibilityTextSeparatesGroupsWithTwoSpaces() {
         let columns = MenuBarColumns(groups: [
-            [col("CX", " "), col("5h", "34"), col("1w", "52"), col("他", "+1"), col(" ", "⏱")],
-            [col("CL", " "), col("1w", "20")],
+            .init(provider: .codex, columns: [
+                col("5h", "34"), col("1w", "52"), col("他", "+1"), col(" ", "⏱")]),
+            .init(provider: .claude, columns: [col("1w", "20")]),
         ])
-        XCTAssertEqual(columns.accessibilityText, "CX 5h 34 1w 52 他 +1 ⏱  CL 1w 20")
+        XCTAssertEqual(columns.accessibilityText, "Codex 5h 34 1w 52 他 +1 ⏱  Claude 1w 20")
     }
 
     func testAccessibilityTextOfEmptyGroupsIsEmpty() {

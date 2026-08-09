@@ -45,12 +45,12 @@ struct MenuBarLabelView: View {
             }
         } else {
             let label = formattedLabel
-            if label.segments.isEmpty {
+            if label.groups.isEmpty {
                 EmptyMenuBarLabelView()
             } else {
                 Image(nsImage: renderedImage(for: MenuBarSegmentView(label: label)))
                     .renderingMode(.original)
-                    .accessibilityLabel(label.text)
+                    .accessibilityLabel(label.accessibilityText)
             }
         }
     }
@@ -64,7 +64,6 @@ struct MenuBarLabelView: View {
             now: Date(),
             mode: settingsStore.displayMode,
             order: settingsStore.providerOrder.compactMap(ProviderID.init(rawValue:)),
-            labels: SettingsSupply.providerLabels(from: settingsStore.providers),
             kindOrders: SettingsSupply.windowKindOrders(from: settingsStore.providers))
     }
 
@@ -75,8 +74,7 @@ struct MenuBarLabelView: View {
             claude: input(for: .claude),
             filter: SettingsSupply.displayFilter(from: settingsStore.providers),
             now: Date(),
-            order: settingsStore.providerOrder.compactMap(ProviderID.init(rawValue:)),
-            labels: SettingsSupply.providerLabels(from: settingsStore.providers))
+            order: settingsStore.providerOrder.compactMap(ProviderID.init(rawValue:)))
     }
 
     private var formattedColumns: MenuBarColumns {
@@ -88,7 +86,6 @@ struct MenuBarLabelView: View {
             now: Date(),
             mode: settingsStore.displayMode,
             order: settingsStore.providerOrder.compactMap(ProviderID.init(rawValue:)),
-            labels: SettingsSupply.providerLabels(from: settingsStore.providers),
             kindOrders: SettingsSupply.windowKindOrders(from: settingsStore.providers))
     }
 
@@ -125,10 +122,17 @@ private struct MenuBarSegmentView: View {
     let label: MenuBarLabel
 
     var body: some View {
-        HStack(spacing: 0) {
-            ForEach(Array(label.segments.enumerated()), id: \.offset) { _, segment in
-                Text(segment.text)
-                    .foregroundStyle(color(for: segment.style))
+        HStack(spacing: 8) {
+            ForEach(Array(label.groups.enumerated()), id: \.offset) { _, group in
+                HStack(spacing: 0) {
+                    ProviderLogoView(provider: group.provider)
+                        .frame(width: 12, height: 12)
+                        .padding(.trailing, 3)
+                    ForEach(Array(group.segments.enumerated()), id: \.offset) { _, segment in
+                        Text(segment.text)
+                            .foregroundStyle(color(for: segment.style))
+                    }
+                }
             }
         }
         .font(.system(size: 12, weight: .medium).monospacedDigit())
@@ -205,7 +209,9 @@ private struct MenuBarColumnsView: View {
                         .opacity(0.25)
                 }
                 HStack(spacing: MenuBarColumnsMetrics.columnSpacing) {
-                    ForEach(Array(group.enumerated()), id: \.offset) { _, column in
+                    ProviderLogoView(provider: group.provider)
+                        .frame(width: 16, height: 16)
+                    ForEach(Array(group.columns.enumerated()), id: \.offset) { _, column in
                         // 各行の高さをフォントサイズちょうどへ詰める。SwiftUI の Text は
                         // フォントサイズに対して余分な行高を持つため、詰めないと文字を
                         // 大きくできない（MenuBarColumnsMetrics のコメント参照）
@@ -254,15 +260,15 @@ private struct MenuBarColumnsView: View {
 #Preview("アイコン表示 - 5段階") {
     MenuBarIconsView(icons: MenuBarIcons(icons: [
         MenuBarIcon(glyph: .gauge(.zero), style: .normal, isStale: false,
-                    accessibilityText: "CX 週間枠 10%"),
+                    accessibilityText: "Codex 週間枠 10%"),
         MenuBarIcon(glyph: .gauge(.low), style: .normal, isStale: false,
-                    accessibilityText: "CX 週間枠 30%"),
+                    accessibilityText: "Codex 週間枠 30%"),
         MenuBarIcon(glyph: .gauge(.mid), style: .normal, isStale: false,
-                    accessibilityText: "CX 週間枠 50%"),
+                    accessibilityText: "Codex 週間枠 50%"),
         MenuBarIcon(glyph: .gauge(.high), style: .warning, isStale: false,
-                    accessibilityText: "CX 週間枠 70%"),
+                    accessibilityText: "Codex 週間枠 70%"),
         MenuBarIcon(glyph: .gauge(.max), style: .critical, isStale: false,
-                    accessibilityText: "CX 週間枠 95%"),
+                    accessibilityText: "Codex 週間枠 95%"),
     ]))
     .padding(8)
     .background(.bar)
@@ -271,11 +277,11 @@ private struct MenuBarColumnsView: View {
 #Preview("アイコン表示 - 退化ケース") {
     MenuBarIconsView(icons: MenuBarIcons(icons: [
         MenuBarIcon(glyph: .gauge(.mid), style: .normal, isStale: true,
-                    accessibilityText: "CX 週間枠 50%（更新が古い）"),
+                    accessibilityText: "Codex 週間枠 50%（更新が古い）"),
         MenuBarIcon(glyph: .unavailable, style: .normal, isStale: false,
-                    accessibilityText: "CX 取得できません"),
+                    accessibilityText: "Codex 取得できません"),
         MenuBarIcon(glyph: .authenticationRequired, style: .normal, isStale: false,
-                    accessibilityText: "CL 要認証"),
+                    accessibilityText: "Claude 要認証"),
     ]))
     .padding(8)
     .background(.bar)

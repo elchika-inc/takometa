@@ -5,8 +5,8 @@ import Foundation   // accessibilityText の trimmingCharacters(in:) に必要
 ///
 /// title / value はいずれも**空文字にしない**（N-6）。空文字だと `Text` の高さが 0 になり
 /// 列の高さが揃わず、メニューバーの高さ制限を超える。
-/// - title に入りうる値: 枠名・プロバイダーラベル・"他"（overflow）・"--"（値なし）・" "（マーク列）
-/// - value に入りうる値: 使用率の整数値・"+n"（overflow）・鮮度マーク・" "（ラベル列と "--" 列）
+/// - title に入りうる値: 枠名・"他"（overflow）・"--"（値なし）・" "（マーク列）
+/// - value に入りうる値: 使用率の整数値・"+n"（overflow）・鮮度マーク・" "（"--" 列）
 public struct MenuBarColumn: Sendable, Equatable {
     public let title: String
     public let value: String
@@ -21,9 +21,19 @@ public struct MenuBarColumn: Sendable, Equatable {
 
 /// プロバイダーごとの列のグループ。区切り線は描画側が groups の間へ入れる。
 public struct MenuBarColumns: Sendable, Equatable {
-    public let groups: [[MenuBarColumn]]
+    public struct Group: Sendable, Equatable {
+        public let provider: ProviderID
+        public let columns: [MenuBarColumn]
 
-    public init(groups: [[MenuBarColumn]]) {
+        public init(provider: ProviderID, columns: [MenuBarColumn]) {
+            self.provider = provider
+            self.columns = columns
+        }
+    }
+
+    public let groups: [Group]
+
+    public init(groups: [Group]) {
         self.groups = groups
     }
 
@@ -34,7 +44,7 @@ public struct MenuBarColumns: Sendable, Equatable {
     public var accessibilityText: String {
         groups
             .map { group in
-                group
+                let content = group.columns
                     .map { column -> String in
                         let title = column.title.trimmingCharacters(in: .whitespaces)
                         let value = column.value.trimmingCharacters(in: .whitespaces)
@@ -44,6 +54,7 @@ public struct MenuBarColumns: Sendable, Equatable {
                     }
                     .filter { !$0.isEmpty }
                     .joined(separator: " ")
+                return "\(providerDisplayName(group.provider)) \(content)"
             }
             .joined(separator: "  ")
     }

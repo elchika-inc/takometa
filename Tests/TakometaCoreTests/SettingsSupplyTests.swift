@@ -67,18 +67,6 @@ final class SettingsSupplyTests: XCTestCase {
         XCTAssertEqual(filter, DisplayFilter())
     }
 
-    func testProviderLabelsMapsKnownProvidersAndIgnoresUnknownProviderIDs() {
-        let providers = [
-            "codex": ProviderSettings(label: "GPT"),
-            "claude": ProviderSettings(label: "🐙"),
-            "future": ProviderSettings(label: "X"),
-        ]
-
-        let labels = SettingsSupply.providerLabels(from: providers)
-
-        XCTAssertEqual(labels, [.codex: "GPT", .claude: "🐙"])
-    }
-
     func testWindowKindOrdersMapsKnownProvidersAndIgnoresUnknownProviderIDs() {
         let providers = [
             "codex": ProviderSettings(windowKindOrder: [.model, .weekly, .session]),

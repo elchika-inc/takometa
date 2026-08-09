@@ -43,12 +43,11 @@ final class MenuBarIconsTests: XCTestCase {
         codex: (windows: [RateLimitWindow], freshness: Freshness)? = nil,
         claude: (windows: [RateLimitWindow], freshness: Freshness)? = nil,
         filter: DisplayFilter = DisplayFilter(),
-        order: [ProviderID] = [.codex, .claude],
-        labels: [ProviderID: String] = [:]
+        order: [ProviderID] = [.codex, .claude]
     ) -> MenuBarIcons {
         MenuBarLabelFormatter.formatCombinedIcons(
             codex: codex, claude: claude, filter: filter, now: now,
-            order: order, labels: labels)
+            order: order)
     }
 
     func testOneIconPerVisibleProviderUsesMostConstrainedWindow() {
@@ -80,7 +79,7 @@ final class MenuBarIconsTests: XCTestCase {
 
         XCTAssertEqual(result.icons, [MenuBarIcon(
             glyph: .unavailable, style: .normal, isStale: false,
-            accessibilityText: "CX 取得できません")])
+            accessibilityText: "Codex 取得できません")])
     }
 
     func testEmptyWindowListProducesUnavailableGlyph() {
@@ -98,7 +97,7 @@ final class MenuBarIconsTests: XCTestCase {
 
         XCTAssertEqual(result.icons, [MenuBarIcon(
             glyph: .authenticationRequired, style: .normal, isStale: false,
-            accessibilityText: "CX 要認証")])
+            accessibilityText: "Codex 要認証")])
     }
 
     func testAuthenticationRequiredIgnoresCachedWindows() {
@@ -108,7 +107,7 @@ final class MenuBarIconsTests: XCTestCase {
 
         XCTAssertEqual(result.icons, [MenuBarIcon(
             glyph: .authenticationRequired, style: .normal, isStale: false,
-            accessibilityText: "CX 要認証")])
+            accessibilityText: "Codex 要認証")])
     }
 
     func testStaleIsMarkedWithoutChangingGlyph() {
@@ -118,7 +117,7 @@ final class MenuBarIconsTests: XCTestCase {
 
         XCTAssertEqual(result.icons, [MenuBarIcon(
             glyph: .gauge(.mid), style: .normal, isStale: true,
-            accessibilityText: "CX 週間枠 50%（更新が古い）")])
+            accessibilityText: "Codex 週間枠 50%（更新が古い）")])
     }
 
     func testAccessibilityTextJoinsProvidersWithTwoSpaces() {
@@ -126,7 +125,7 @@ final class MenuBarIconsTests: XCTestCase {
             codex: ([window(id: "w", scope: .weeklyAll, used: 49)], .fresh),
             claude: ([window(id: "s", scope: .session, used: 20, kind: .session)], .fresh))
 
-        XCTAssertEqual(result.accessibilityText, "CX 週間枠 49%  CL 5時間枠 20%")
+        XCTAssertEqual(result.accessibilityText, "Codex 週間枠 49%  Claude 5時間枠 20%")
     }
 
     func testNilInputProducesUnavailableIconForVisibleProvider() {
@@ -135,15 +134,14 @@ final class MenuBarIconsTests: XCTestCase {
 
         XCTAssertEqual(result.icons, [MenuBarIcon(
             glyph: .unavailable, style: .normal, isStale: false,
-            accessibilityText: "CX 取得できません")])
+            accessibilityText: "Codex 取得できません")])
     }
 
-    func testProviderOrderAndCustomLabelsAreApplied() {
+    func testProviderOrderUsesDisplayNames() {
         let result = icons(
             codex: ([window(id: "cw", scope: .weeklyAll, used: 30)], .fresh),
             claude: ([window(id: "cs", scope: .session, used: 40, kind: .session)], .fresh),
-            order: [.claude, .codex],
-            labels: [.codex: "Codex", .claude: "Claude"])
+            order: [.claude, .codex])
 
         XCTAssertEqual(
             result.icons.map(\.accessibilityText),
@@ -155,15 +153,15 @@ final class MenuBarIconsTests: XCTestCase {
             ([
                 window(id: "s", scope: .session, used: 95, kind: .session),
                 window(id: "w", scope: .weeklyAll, used: 85),
-            ], .init(showSession: false), "CX 週間枠 85%"),
+            ], .init(showSession: false), "Codex 週間枠 85%"),
             ([
                 window(id: "w", scope: .weeklyAll, used: 95),
                 window(id: "m", scope: .model(id: "model", displayName: "Model"), used: 75),
-            ], .init(showWeekly: false), "CX Model 75%"),
+            ], .init(showWeekly: false), "Codex Model 75%"),
             ([
                 window(id: "m", scope: .model(id: "model", displayName: "Model"), used: 95),
                 window(id: "s", scope: .session, used: 75, kind: .session),
-            ], .init(showModel: false), "CX 5時間枠 75%"),
+            ], .init(showModel: false), "Codex 5時間枠 75%"),
         ]
 
         for (windows, providerFilter, expectedText) in cases {
@@ -204,7 +202,7 @@ final class MenuBarIconsTests: XCTestCase {
                 filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
 
             XCTAssertEqual(result.icons[0].glyph, .gauge(.max))
-            XCTAssertEqual(result.icons[0].accessibilityText, "CX 週間枠 値不明")
+            XCTAssertEqual(result.icons[0].accessibilityText, "Codex 週間枠 値不明")
         }
     }
 
@@ -218,7 +216,7 @@ final class MenuBarIconsTests: XCTestCase {
                 filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
 
             XCTAssertEqual(result.icons[0].glyph, .gauge(.max))
-            XCTAssertEqual(result.icons[0].accessibilityText, "CX 週間枠 値不明")
+            XCTAssertEqual(result.icons[0].accessibilityText, "Codex 週間枠 値不明")
         }
     }
 
@@ -227,6 +225,6 @@ final class MenuBarIconsTests: XCTestCase {
             codex: ([window(id: "w", scope: .weeklyAll, used: 49.9)], .fresh),
             filter: DisplayFilter(claude: ProviderDisplayFilter(show: false)))
 
-        XCTAssertEqual(result.icons[0].accessibilityText, "CX 週間枠 49%")
+        XCTAssertEqual(result.icons[0].accessibilityText, "Codex 週間枠 49%")
     }
 }

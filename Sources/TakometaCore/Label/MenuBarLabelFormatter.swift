@@ -71,13 +71,29 @@ public struct LabelSegment: Sendable, Equatable {
 }
 
 public struct MenuBarLabel: Sendable, Equatable {
-    public let segments: [LabelSegment]
+    public struct Group: Sendable, Equatable {
+        public let provider: ProviderID
+        public let segments: [LabelSegment]
 
-    public init(segments: [LabelSegment]) {
-        self.segments = segments
+        public init(provider: ProviderID, segments: [LabelSegment]) {
+            self.provider = provider
+            self.segments = segments
+        }
     }
 
-    public var text: String { segments.map(\.text).joined() }
+    public let groups: [Group]
+
+    public init(groups: [Group]) {
+        self.groups = groups
+    }
+
+    /// VoiceOver 用。グループの先頭にプロバイダ名を加える。
+    public var accessibilityText: String {
+        groups.map { group in
+            let text = group.segments.map(\.text).joined()
+            return "\(providerDisplayName(group.provider)) \(text)"
+        }.joined(separator: "  ")
+    }
 }
 
 public enum MenuBarLabelFormatter {
@@ -91,7 +107,6 @@ public enum MenuBarLabelFormatter {
         let provider: ProviderID
         let windows: [RateLimitWindow]
         let freshness: Freshness
-        let label: String
         let kindOrder: [WindowKindCategory]
     }
 
@@ -121,22 +136,11 @@ public enum MenuBarLabelFormatter {
         }
     }
 
-    private static func resolvedPrefix(provider: ProviderID, custom: String) -> String {
-        let stripped = String(custom.unicodeScalars.filter {
-            !CharacterSet.controlCharacters.contains($0) && !CharacterSet.newlines.contains($0)
-        })
-        let trimmed = stripped.trimmingCharacters(in: .whitespaces)
-        let clamped = String(trimmed.prefix(6))
-        let base = clamped.isEmpty ? (provider == .codex ? "CX" : "CL") : clamped
-        return base + " "
-    }
-
     private static func resolveProviders(
         codex: (windows: [RateLimitWindow], freshness: Freshness)?,
         claude: (windows: [RateLimitWindow], freshness: Freshness)?,
         filter: DisplayFilter,
         order: [ProviderID],
-        labels: [ProviderID: String],
         kindOrders: [ProviderID: [WindowKindCategory]]
     ) -> [ResolvedProvider] {
         var result: [ResolvedProvider] = []
@@ -157,7 +161,6 @@ public enum MenuBarLabelFormatter {
                 provider: provider,
                 windows: filtered(input.windows, by: providerFilter),
                 freshness: input.freshness,
-                label: labels[provider] ?? "",
                 kindOrder: kindOrders[provider] ?? WindowKindCategory.defaultOrder))
         }
         return result
@@ -169,19 +172,18 @@ public enum MenuBarLabelFormatter {
         freshness: Freshness,
         now: Date,
         mode: DisplayMode,
-        customPrefix: String = "",
         kindOrder: [WindowKindCategory] = WindowKindCategory.defaultOrder
-    ) -> MenuBarLabel {
-        let providerPrefix = resolvedPrefix(provider: provider, custom: customPrefix)
+    ) -> [LabelSegment] {
+        _ = provider
         if freshness == .unavailable {
-            return MenuBarLabel(segments: [normal(providerPrefix + "--")])
+            return [normal("--")]
         }
 
         let result = select(windows: windows, mode: mode)
         guard !result.windows.isEmpty else {
-            var segments = [normal(providerPrefix + "--")]
+            var segments = [normal("--")]
             appendFreshnessMark(freshness, to: &segments)
-            return MenuBarLabel(segments: segments)
+            return segments
         }
 
         let sortedWindows = WindowKindOrdering.sorted(
@@ -191,7 +193,7 @@ public enum MenuBarLabelFormatter {
         let orderedWindows = applyMarkers(to: sortedWindows, defaultSorted: defaultSorted)
 
         let abbreviations = resolveAbbreviations(for: orderedWindows)
-        var segments = [normal(providerPrefix)]
+        var segments: [LabelSegment] = []
         for (index, selected) in orderedWindows.enumerated() {
             if index > 0 { segments.append(normal("|")) }
             let marker = selected.fixedPrefix ?? abbreviations[index] ?? ""
@@ -204,7 +206,7 @@ public enum MenuBarLabelFormatter {
             segments.append(normal(" +\(result.overflow)"))
         }
         appendFreshnessMark(freshness, to: &segments)
-        return MenuBarLabel(segments: segments)
+        return segments
     }
 
     public static func formatCombined(
@@ -214,26 +216,21 @@ public enum MenuBarLabelFormatter {
         now: Date,
         mode: DisplayMode,
         order: [ProviderID] = [.codex, .claude],
-        labels: [ProviderID: String] = [:],
         kindOrders: [ProviderID: [WindowKindCategory]] = [:]
     ) -> MenuBarLabel {
         let resolved = resolveProviders(
             codex: codex, claude: claude, filter: filter,
-            order: order, labels: labels, kindOrders: kindOrders)
+            order: order, kindOrders: kindOrders)
 
-        var segments: [LabelSegment] = []
-        for item in resolved {
-            if !segments.isEmpty { segments.append(normal("  ")) }
-            segments.append(contentsOf: format(
+        return MenuBarLabel(groups: resolved.map { item in
+            MenuBarLabel.Group(provider: item.provider, segments: format(
                 provider: item.provider,
                 windows: item.windows,
                 freshness: item.freshness,
                 now: now,
                 mode: mode,
-                customPrefix: item.label,
-                kindOrder: item.kindOrder).segments)
-        }
-        return MenuBarLabel(segments: segments)
+                kindOrder: item.kindOrder))
+        })
     }
 
     public static func formatCombinedColumns(
@@ -243,22 +240,21 @@ public enum MenuBarLabelFormatter {
         now: Date,
         mode: DisplayMode,
         order: [ProviderID] = [.codex, .claude],
-        labels: [ProviderID: String] = [:],
         kindOrders: [ProviderID: [WindowKindCategory]] = [:]
     ) -> MenuBarColumns {
         let resolved = resolveProviders(
             codex: codex, claude: claude, filter: filter,
-            order: order, labels: labels, kindOrders: kindOrders)
+            order: order, kindOrders: kindOrders)
 
         let groups = resolved.map { item in
-            columnGroup(
+            MenuBarColumns.Group(
                 provider: item.provider,
-                windows: item.windows,
-                freshness: item.freshness,
-                now: now,
-                mode: mode,
-                customPrefix: item.label,
-                kindOrder: item.kindOrder)
+                columns: columnGroup(
+                    windows: item.windows,
+                    freshness: item.freshness,
+                    now: now,
+                    mode: mode,
+                    kindOrder: item.kindOrder))
         }
         return MenuBarColumns(groups: groups)
     }
@@ -268,13 +264,12 @@ public enum MenuBarLabelFormatter {
         claude: (windows: [RateLimitWindow], freshness: Freshness)?,
         filter: DisplayFilter,
         now: Date,
-        order: [ProviderID] = [.codex, .claude],
-        labels: [ProviderID: String] = [:]
+        order: [ProviderID] = [.codex, .claude]
     ) -> MenuBarIcons {
         // アイコンは1プロバイダ1個のため枠種別の並び順は影響しない。kindOrders は空で渡す。
         let resolved = resolveProviders(
             codex: codex, claude: claude, filter: filter,
-            order: order, labels: labels, kindOrders: [:])
+            order: order, kindOrders: [:])
         return MenuBarIcons(icons: resolved.map { icon(for: $0, now: now) })
     }
 
@@ -288,7 +283,7 @@ public enum MenuBarLabelFormatter {
     ) -> [ProviderCard] {
         let resolved = resolveProviders(
             codex: codex, claude: claude, filter: filter,
-            order: order, labels: [:], kindOrders: kindOrders)
+            order: order, kindOrders: kindOrders)
         return resolved.map { item in
             card(for: item, now: now)
         }
@@ -330,7 +325,7 @@ public enum MenuBarLabelFormatter {
     }
 
     private static func icon(for item: ResolvedProvider, now: Date) -> MenuBarIcon {
-        let prefix = resolvedPrefixTitle(provider: item.provider, custom: item.label)
+        let prefix = providerDisplayName(item.provider)
 
         if item.freshness == .authenticationRequired {
             return MenuBarIcon(
@@ -372,27 +367,21 @@ public enum MenuBarLabelFormatter {
     }
 
     private static func columnGroup(
-        provider: ProviderID,
         windows: [RateLimitWindow],
         freshness: Freshness,
         now: Date,
         mode: DisplayMode,
-        customPrefix: String,
         kindOrder: [WindowKindCategory]
     ) -> [MenuBarColumn] {
-        let labelColumn = MenuBarColumn(
-            title: resolvedPrefixTitle(provider: provider, custom: customPrefix),
-            value: " ",
-            style: .normal)
         let dashColumn = MenuBarColumn(title: "--", value: " ", style: .normal)
 
         if freshness == .unavailable {
-            return [labelColumn, dashColumn]
+            return [dashColumn]
         }
 
         let result = select(windows: windows, mode: mode)
         guard !result.windows.isEmpty else {
-            var group = [labelColumn, dashColumn]
+            var group = [dashColumn]
             appendFreshnessColumn(freshness, to: &group)
             return group
         }
@@ -402,7 +391,7 @@ public enum MenuBarLabelFormatter {
             result.windows, order: kindOrder, category: category(of:))
         let titles = columnTitles(for: sorted.map(\.window.scope))
 
-        var group = [labelColumn]
+        var group: [MenuBarColumn] = []
         for (index, selected) in sorted.enumerated() {
             group.append(MenuBarColumn(
                 title: titles[index],
@@ -429,12 +418,6 @@ public enum MenuBarLabelFormatter {
         case .fresh, .unavailable:
             break
         }
-    }
-
-    /// 2行のラベル列用。既存 `resolvedPrefix` は末尾に空白を付けるため、それを除いた形で解決する。
-    private static func resolvedPrefixTitle(provider: ProviderID, custom: String) -> String {
-        let prefix = resolvedPrefix(provider: provider, custom: custom)
-        return String(prefix.dropLast())   // resolvedPrefix は末尾に " " を付けて返す
     }
 
     /// 2行表示の上段（枠名）を解決する。衝突回避のため配列で受けて配列で返す。

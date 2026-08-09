@@ -140,6 +140,10 @@ func measureMenuBarColumns() {
                             .opacity(0.25)
                     }
                     HStack(spacing: MenuBarColumnsMetrics.columnSpacing) {
+                        Image(systemName: "terminal")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
                         ForEach(Array(group.enumerated()), id: \.offset) { _, column in
                             // 実ビュー（MenuBarColumnsView）と同じく行の高さを詰める。
                             // 詰め方が食い違うと計測が実ビューを反映しない
@@ -163,14 +167,14 @@ func measureMenuBarColumns() {
 
     let cases: [(String, [[(String, String)]])] = [
         ("実データ相当", [
-            [("CX", " "), ("1w", "66"), ("GPT-5.3…", "0")],
-            [("CL", " "), ("5h", "16"), ("1w", "20"), ("Fable", "11")],
+            [("1w", "66"), ("GPT-5.3…", "0")],
+            [("5h", "16"), ("1w", "20"), ("Fable", "11")],
         ]),
         ("overflow + stale", [
-            [("CX", " "), ("5h", "34"), ("1w", "52"), ("GPT", "78"), ("Fable", "65"),
+            [("5h", "34"), ("1w", "52"), ("GPT", "78"), ("Fable", "65"),
              ("他", "+1"), (" ", "⏱")],
         ]),
-        ("値なし", [[("CX", " "), ("--", " ")]]),
+        ("値なし", [[("--", " ")]]),
     ]
 
     let limit = NSStatusBar.system.thickness

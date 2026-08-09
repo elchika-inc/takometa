@@ -1,0 +1,12 @@
+Takometa NOTICE
+
+本アプリは以下のサードパーティ素材を含みます。
+
+## Claude ロゴ（Sources/TakometaApp/Resources/claude-logo.svg）
+- 出典: simple-icons (https://github.com/simple-icons/simple-icons) の claude.svg（無改変）
+- ライセンス: CC0 1.0 Universal (https://creativecommons.org/publicdomain/zero/1.0/)
+- 商標: Claude および Anthropic は Anthropic PBC の商標です。本アプリはプロバイダ識別の
+  目的でのみ表示し、Anthropic による後援・承認を意味しません。
+
+## その他の商標
+- OpenAI および Codex は OpenAI, L.L.C. の商標です。本アプリはこれらのロゴを含みません。
