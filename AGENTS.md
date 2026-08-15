@@ -11,7 +11,7 @@ Codex と Claude Code のレート制限（5時間枠・週間枠・モデル固
 
 - スタック: Swift 6.2 + SwiftUI の macOS ネイティブアプリ（`MenuBarExtra` 常駐・`LSUIElement`）。
 - Cloudflare Web スタック（pnpm / Vite Plus / biome / design-tokens / legal）は本リポジトリでは適用外。
-- standards_version: 2026-08-04 (rev.56)。
+- standards_version: 2026-08-15 (rev.71)。
 - branch_policy: `unprotected`（public リポジトリでは branch protection を利用できるが、現時点では設定していない。エージェントの `main` 直接 push 禁止は DOCS_OPS.md §5 の MUST により運用する）。
 
 ## Key Commands
@@ -47,6 +47,7 @@ Claude statusLine ─ fallback snapshot ──┘
 - 通信先を OpenAI / Anthropic の公式ホスト以外へ広げない。
 - 非公開データ形状（Claude OAuth usage レスポンス等）を安定 API として扱わない。デコーダーを隔離し、fixture テストと不明フィールドのログで変更を検知する。
 - HTTP 200 / exit 0 / 空配列だけを成功条件にしない。妥当な制限ウィンドウ1つ以上と取得時刻を確認して成功扱いにする。
+- UI デザインは macOS Human Interface Guidelines と SwiftUI 標準コンポーネントの慣例に従う。
 - エージェントは main へ直接コミットしない。作業ブランチへのコミットと PR 作成までは自律で行い、main へのマージは人間が承認する（正本: standards DOCS_OPS.md §5）。
 
 ## エージェント連携
